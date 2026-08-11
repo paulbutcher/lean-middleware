@@ -13,4 +13,7 @@ def main : IO Unit := do
   Tests.NotModified.run
   Tests.File.run
   Tests.Multipart.run
+  Tests.Cookies.run
+  Tests.Session.run
+  Tests.Flash.run
   IO.println "All tests passed."

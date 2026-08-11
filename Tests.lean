@@ -7,3 +7,6 @@ import Tests.Params
 import Tests.NotModified
 import Tests.File
 import Tests.Multipart
+import Tests.Cookies
+import Tests.Session
+import Tests.Flash

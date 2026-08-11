@@ -7,3 +7,6 @@ import Middleware.Params
 import Middleware.NotModified
 import Middleware.File
 import Middleware.Multipart
+import Middleware.Cookies
+import Middleware.Session
+import Middleware.Flash

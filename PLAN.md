@@ -682,3 +682,388 @@ the middleware itself.
   termination ends up wanted) goes in `Tests/Multipart.lean`, not the
   production file, unless something in `Middleware/Multipart.lean` itself
   actually consumes it.
+
+
+---
+
+# Stage 4: `cookies` / `session` / `flash`
+
+## Status: implemented
+
+`lake build` and `lake test` pass clean from a from-scratch rebuild, no
+warnings. Delivered as designed: `Middleware/Cookies.lean` (`SameSite`,
+`CookieAttrs`, `SetCookie` with a `Header` instance, `Cookies`,
+`SetCookies`, `appendSetCookie`, `parseCookieHeader`, `cookies`),
+`Middleware/Session.lean` (`Session` with `get`/`set`/`remove`,
+`SessionStore` typeclass, `genSessionId`, `MemoryStore`, `SessionOptions`,
+`SessionData`, `SessionUpdate`, `session`), `Middleware/Flash.lean`
+(`Flash`, `FlashMessage`, `flash`), and matching `Tests/Cookies.lean`,
+`Tests/Session.lean`, `Tests/Flash.lean`. The response-extension signaling
+protocol (`SessionUpdate`/`FlashMessage`/`SetCookies` on `Response.extensions`,
+read and rewritten by outer middleware) worked exactly as designed with no
+changes needed to `Std.Http` or `Middleware/Core.lean`.
+
+The one real bug, caught only by a `Plausible` property test, not by any
+hand-written example: `SetCookie.serialize`/`parse` originally built on
+`URI.EncodedQueryParam` for percent-encoding cookie values (the plan's
+stated reuse of `Params.lean`'s existing machinery). A round-trip property
+test (`cookieValueRoundtripTest`) found three successive counter-examples --
+`";"`, `"+"`, then `" "` -- each pointing at the same root cause:
+`EncodedQueryParam` implements the **query-string-specific**
+form-urlencoded convention of encoding a space as a bare `+` (see
+`Std/Http/Data/URI/Encoding.lean:482-500`), which is *ambiguous* with a
+value that itself legitimately contains a literal `+` -- both encode to (or
+decode from) the identical raw `+` byte, so there is no way to fix this by
+post-processing the encoded output; the ambiguity is baked into `encode`
+itself. Cookies have no such convention (RFC 6265 doesn't special-case
+`+`), so this wasn't even the right primitive to reuse. Fixed by switching
+to `URI.EncodedString (r := isPChar)` -- the same primitive
+`URI.EncodedSegment` (path segments) is built on -- which does plain
+percent-encoding with no `+`/space special-casing at all, then manually
+escaping the three RFC 3986 `sub-delims` characters (`;`, `,`, `+`) it still
+leaves unescaped but that aren't safe in `cookie-octet` (or, for `+`, aren't
+worth leaving to chance). This is a good example of why the plan's
+"reuse existing utilities" instinct still needs a property test standing
+behind it: the reuse was real, just aimed at the wrong existing utility, and
+only a generative test caught it -- three different hand-picked example
+values (`";"`, a plain word, a URL) would have had to include exactly `+`
+or a bare space to catch it by hand.
+
+Also confirmed, per the standing lesson from the Stage 3/File.lean review:
+no theorem was added to any `Middleware/*.lean` file. All three files rely
+purely on ordinary structural definitions; nothing needed a termination or
+correctness proof beyond what the compiler discharges automatically.
+
+Two smaller gotchas, consistent with prior stages' running list:
+- `String.drop`/`Slice`-returning `String` methods (`.drop`, etc.) return
+  `String.Slice` in this toolchain, not `String` -- need `.toString` before
+  chaining a `String`-only method like `.splitOn` onto the result, matching
+  `ETag.parse`'s existing `(s.drop 2).toString` precedent (missed once in a
+  test helper, caught immediately by the compiler).
+- `Middleware.id` (from `Core.lean`) shadows the global `_root_.id` inside
+  `namespace Middleware` -- `parts.filterMap id` resolved to `Middleware.id
+  : Middleware`, not the identity function, producing a type mismatch.
+  Fixed with `(·)` instead of bare `id`. Same shadowing-risk category as the
+  `meta`/`matches`/`prefix` reserved-identifier surprises from prior
+  stages, just from a project-local name instead of a keyword.
+- The established "always positional, never named args" rule for anything
+  that eventually returns a bare `Middleware` arrow extends to *every*
+  parameter of such a function, not just the final handler argument: `session
+  store handler` (omitting the optional `options` argument entirely) doesn't
+  skip `options` and apply `handler` to the resulting `Middleware` -- it
+  binds `handler` directly to the `options : SessionOptions` parameter
+  positionally, since supplying a positional argument in that slot always
+  consumes it regardless of whether it has a default. The fix is the same
+  positional-args discipline as before, just applied one argument earlier:
+  `session store {} handler`, using `{}` explicitly for the all-defaults
+  case rather than omitting it.
+
+## Context
+
+Following Phase 1/2, Stage 2 (`not-modified` + `file`), and Stage 3
+(`multipart-params`) — see `PLAN.md` in the repo root for that history —
+this stage covers cookie support, server-side sessions, and flash messages,
+mirroring ring-core's `ring.middleware.cookies`, `ring.middleware.session`
+(+ `session/store`, `session/memory`), and `ring.middleware.flash`. Without
+this, applications built on this library have no way to maintain any state
+across requests (login state, shopping carts, one-time confirmation
+messages) — everything so far is purely stateless request/response
+transformation.
+
+Scope, confirmed with the user this round:
+- Build all three (`cookies`, `session`, `flash`) in this stage — they're
+  naturally layered (flash lives inside session data; session's identity
+  cookie is written via the cookie-writing mechanism), so a half-finished
+  session without flash, or flash with no session to sit on, would be an
+  awkward place to pause.
+- `session` uses a **pluggable `SessionStore` typeclass**, mirroring Ring's
+  `SessionStore` protocol, with a concrete in-memory implementation shipped
+  as the default/reference store — not hardcoded against one store.
+- The in-memory store has **no expiry/eviction**, matching Ring's
+  `MemoryStore` exactly (an explicitly documented, accepted limitation of
+  the reference implementation, not a bug to fix here).
+
+## Research grounding
+
+(Full detail gathered from ring-core's actual source at tag `1.15.4` and the
+v4.33.0 toolchain source; summarized here, not re-derived.)
+
+- **Ring's `cookies.clj`**: RFC 6265 cookie-value/token regexes; `Set-Cookie`
+  built per-cookie from a `{:value ... :attr ...}` map, concatenated onto
+  the response's `Set-Cookie` header list (one header line per cookie, never
+  comma-folded — RFC 6265 explicitly forbids folding because `Expires`
+  values contain commas); attribute keys `:domain/:max-age/:path/:secure
+  /:expires/:http-only/:same-site/:partitioned` map to wire names
+  `Domain/Max-Age/Path/Secure/Expires/HttpOnly/SameSite/Partitioned`.
+  Request `Cookie` header is `name=value; name=value`, no attributes ever
+  appear there (RFC 6265 §4.2.1).
+- **Ring's `session.clj`**: attaches `:session` (a plain map, `{}` if no
+  valid session cookie) onto the request from `SessionStore.read-session`;
+  on the way out, if the response sets `:session` to a map, it's persisted
+  via `write-session` (which mints a fresh key if none existed) and a
+  `Set-Cookie` for the session-id is added; if response's `:session` is
+  explicitly `nil`, the stored session is deleted; if the response never
+  touches `:session` at all, storage and cookies are left untouched (no
+  redundant writes every request).
+- **Ring's `session/memory.clj`**: an atom holding `{key → data}`; `write`
+  generates a random UUID if `key` is `nil`, `swap!`s it in, returns the
+  (possibly-new) key; no expiry logic anywhere.
+- **Ring's `flash.clj`**: flash data lives **inside** the session under a
+  reserved `:_flash` key, not a separate store. On the way in, `:_flash` is
+  popped off `:session` into a top-level `:flash` on the request (and
+  scrubbed from what downstream sees as `:session`). On the way out, if the
+  response sets `:flash`, it's written into the *next* session's `:_flash`
+  (merged onto whatever the response — or, falling back, the already
+  flash-stripped request — considers `:session` to be); if the response sets
+  neither `:flash` nor `:session`, it passes through completely unchanged.
+- **Nothing cookie-related exists anywhere in `Std.Http`** (confirmed via
+  exhaustive grep) — same situation as `ETag`/ `Last-Modified` in Stage 2,
+  built entirely as new `Middleware.Header.Name` constants +
+  `Header`-typeclass instances, following `Middleware/NotModified.lean`'s
+  existing template exactly.
+- **`Response`, not just `Request`, carries an `extensions : Extensions`
+  field** (`Std/Http/Data/Response.lean:65`, confirmed by reading the file
+  directly) — this is new to this stage (no prior middleware has needed
+  handler → middleware communication on the *way out*) and is the mechanism
+  this design uses to let a handler signal "update the session" / "set this
+  flash message" without Std.Http needing any bespoke session concept.
+  `Extensions.insert` **replaces** same-type values (confirmed in
+  `Std/Http/Data/Extensions.lean:88`), so anything that needs "append, don't
+  clobber" (e.g. multiple `Set-Cookie`s contributed by different layers)
+  must be modeled as one wrapper struct holding a `List`, read-modified-and-
+  reinserted — same shape `Params`/`MultipartParams` already use on the
+  request side.
+- **No UUID/hex-encoding utility exists anywhere in Lean core or
+  `Std.Http`** — session IDs are generated from `IO.getRandomBytes 32`
+  (`Init/System/IO.lean:428`, a direct OS-entropy call, not the seeded
+  general-purpose PRNG in `Init/Data/Random.lean` which is unsuitable for
+  anything security-sensitive) hex-encoded by a small local helper, the same
+  "write it, nothing to reuse" situation `findAllOccurrences` was in in
+  Stage 3.
+- **Percent-encoding for cookie values is not reinvented**: `Params.lean`'s
+  `application/x-www-form-urlencoded` parsing already leans on
+  `Std.Http.URI.EncodedQueryParam.encode : String → EncodedQueryParam` /
+  `.fromString? : String → Option EncodedQueryParam` / `ToString
+  EncodedQueryParam` (percent-encode / decode / render). Reusing this
+  directly for cookie values (encode on write, decode on read) is both
+  genuine reuse of an already-tested utility and sidesteps hand-writing an
+  RFC 6265 `cookie-octet` character-class validator: an `EncodedQueryParam`-
+  encoded string is always composed of token characters and `%XX` escapes,
+  which is a strict subset of `cookie-octet`, so it's always valid by
+  construction. Cookie *names* are validated with the already-existing
+  `Std.Http.Internal.isToken` (`Std/Http/Internal/String.lean:120-124`).
+
+## Design
+
+### `Middleware/Cookies.lean`
+
+New header-name constants (same template as `NotModified.lean`):
+```
+namespace Middleware.Header.Name
+def cookie : Header.Name := .mk "cookie"
+def setCookie : Header.Name := .mk "set-cookie"
+end Middleware.Header.Name
+```
+
+```
+inductive SameSite where | strict | lax | none
+
+structure CookieAttrs where
+  domain : Option String := none
+  path : Option String := none
+  maxAge : Option Int := none        -- seconds; 0/negative permitted in practice
+                                      -- (immediate expiry) even though RFC 6265's own
+                                      -- ABNF only spells out positive values
+  expires : Option Std.Time.DateTime := none
+  secure : Bool := false
+  httpOnly : Bool := false
+  sameSite : Option SameSite := none
+
+structure SetCookie where
+  name : String
+  value : String
+  attrs : CookieAttrs := {}
+
+instance : Header SetCookie := ⟨parse, serialize⟩  -- serialize percent-encodes
+  -- `value` via EncodedQueryParam.encode, renders attrs via write-attr-map-style
+  -- folding (reusing LastModified's Std.Time.DateTime.toRFC822String for `expires`);
+  -- parse decodes the name=value pair back (attrs are write-only in practice, but a
+  -- full Header instance stays symmetric with ETag/LastModified's existing style,
+  -- and lets a roundtrip test exist without a separate ad hoc string check).
+
+structure Cookies where
+  pairs : List (String × String)   -- decoded values, request-side only
+deriving TypeName
+
+namespace Cookies
+def get (c : Cookies) (name : String) : Option String := ...
+end Cookies
+
+structure SetCookies where          -- response-side accumulator; see "response
+  cookies : List SetCookie          -- extension protocol" below
+deriving TypeName
+
+def cookies : Middleware
+```
+`cookies` (request side): parses the `Cookie` header (`name=value` pairs
+split on `"; "`, each value decoded via `EncodedQueryParam.fromString?`,
+silently dropping any pair that fails to decode rather than rejecting the
+whole request — malformed cookies are common in the wild, e.g. from
+third-party scripts, and RFC 6265 §5.3/6 explicitly anticipates lenient
+handling), attaches `Cookies`. Response side: reads the `SetCookies`
+extension (if any middleware/handler contributed one) and turns each entry
+into a `Set-Cookie` header inserted via `Headers.insert` (additive, not
+`replaceLast` — confirmed `Headers` supports true multi-value-per-name via
+`IndexMultiMap`, so N cookies serialize as N separate `Set-Cookie:` lines,
+matching RFC 6265's explicit "one header per cookie" requirement).
+
+### `Middleware/Session.lean`
+
+```
+abbrev Session := List (String × String)
+
+namespace Session
+def get (s : Session) (key : String) : Option String := ...
+def set (s : Session) (key value : String) : Session := ...   -- replace-or-append
+def remove (s : Session) (key : String) : Session := ...
+end Session
+
+class SessionStore (σ : Type) where
+  read : σ → String → IO (Option Session)
+  write : σ → Option String → Session → IO String   -- mints a key if none given
+  delete : σ → String → IO Unit
+
+structure MemoryStore where
+  ref : IO.Ref (List (String × Session))
+
+def MemoryStore.new : IO MemoryStore    -- fresh, empty-backed store
+instance : SessionStore MemoryStore where ...   -- linear-scan alist under one Ref,
+  -- no expiry, matching Ring's MemoryStore exactly (documented limitation)
+
+structure SessionOptions where
+  cookieName : String := "lean-session"
+  cookieAttrs : CookieAttrs := { path := some "/", httpOnly := true }  -- matches
+    -- Ring's session default of {:path "/" :http-only true}
+
+structure SessionData where    -- request-side extension: what session middleware
+  key : Option String          -- loaded, for flash/handler to read
+  data : Session
+deriving TypeName
+
+inductive SessionUpdate where   -- response-side extension: what the handler (or
+  | unchanged                   -- flash, on its behalf) wants done with the session
+  | write (data : Session)
+  | delete
+deriving TypeName
+
+def session [SessionStore σ] (store : σ) (options : SessionOptions := {}) : Middleware
+```
+Request side: looks up `options.cookieName` in the `Cookies` extension
+(`.getD` empty if `cookies` wasn't wrapped outer — degrades to "no session
+ever found", not a crash), calls `SessionStore.read` if a cookie value was
+present, attaches `SessionData { key, data := loaded.getD [] }`.
+
+Response side: reads the `SessionUpdate` extension (absent, or
+`.unchanged`, is a pure no-op — no store write, no cookie change, matching
+Ring's "response never touched `:session`" branch); `.write data` calls
+`SessionStore.write store key data` (minting a fresh key when `key` was
+`none`) and appends a `SetCookie` for the session-id onto the response's
+`SetCookies` list (read-modify-reinsert, since `Extensions.insert`
+replaces); `.delete` calls `SessionStore.delete` (only if a key existed) and
+appends an immediately-expiring `SetCookie` (`maxAge := some 0`) so the
+client drops it too.
+
+**Response-extension signaling protocol** (the one genuinely new pattern
+this stage introduces, worth stating explicitly since nothing prior in the
+codebase needed it): a handler that wants to change the session builds its
+response the normal way and additionally attaches a `SessionUpdate` via
+`Response.Builder.extension`, e.g.
+`Response.ok |>.extension (SessionUpdate.write newData) |>.text "..."`.
+Middleware between the handler and `session` (i.e. `flash`) can read and
+*rewrite* that same extension before it reaches `session`, which is exactly
+how flash piggybacks its own write onto whatever the handler already
+decided about the session, without `session` needing to know `flash`
+exists.
+
+### `Middleware/Flash.lean`
+
+```
+structure Flash where
+  message : Option String    -- request-side: what the *previous* request left
+deriving TypeName
+
+structure FlashMessage where
+  value : String              -- response-side: what the handler wants to persist
+deriving TypeName             -- for the *next* request
+
+def flash : Middleware
+```
+Request side (requires `session` wrapped outer — reads `SessionData`,
+defaulting to empty if absent rather than failing): pops `"__flash"` out of
+`SessionData.data`, attaches `Flash { message := popped }` for the handler
+to read, and re-inserts a flash-stripped `SessionData` so nothing downstream
+sees the internal `"__flash"` key leak into ordinary session data.
+
+Response side, after calling the inner handler: if the response carries no
+`FlashMessage` extension, pass the response through completely unchanged
+(no gratuitous session write, matching Ring). If it does, compute the base
+session data to write from the response's own `SessionUpdate.write data` if
+the handler already set one, else fall back to the (flash-stripped) session
+data read on the way in; set `"__flash"` on that data to the new message;
+attach the merged result as `SessionUpdate.write` on the response (replacing
+whatever was there), for `session` (outer) to actually persist and cookie.
+
+### Composition ordering
+
+`cookies` must be outermost of the three (it's the only one that turns
+`SetCookies` into wire headers); `session` next; `flash` innermost of the
+three, directly around the parts of the handler stack that use it — i.e.
+`Middleware.apply [cookies, session, flash, ...] handler`. This matches
+`Middleware/Core.lean`'s existing documented "first list element = outermost
+layer" semantics with no changes needed there. Each layer degrades
+gracefully (documented above) if a supposedly-outer layer is missing, rather
+than crashing — consistent with how `notModified` already tolerates running
+without `file` upstream.
+
+### Files
+
+- `Middleware/Cookies.lean`, `Middleware/Session.lean`,
+  `Middleware/Flash.lean` — new, added to `Middleware.lean`.
+- `Tests/Cookies.lean`, `Tests/Session.lean`, `Tests/Flash.lean` — new,
+  added to `Tests.lean` and `Main.lean`.
+
+## Verification
+
+- Per-file `mcp__lean-lsp__lean_diagnostic_messages` after each edit
+  (`lean_build` once cross-file imports exist), same loop as prior stages.
+- `Cookies`: request `Cookie` header parses multiple pairs; a malformed
+  pair is dropped, not fatal; `SetCookie` serializes every attribute
+  correctly (`Path`, `Domain`, `Max-Age`, `Expires` via the existing RFC822
+  rendering, `Secure`, `HttpOnly`, `SameSite`); multiple cookies set in one
+  response produce multiple distinct `Set-Cookie:` header lines (not one
+  comma-joined line); a value with reserved characters (`;`, spaces, non-
+  ASCII) round-trips correctly through encode/decode.
+- `Session`: a fresh request with no cookie gets an empty session and, if
+  the handler writes one, a `Set-Cookie` with a freshly minted id comes
+  back; a subsequent request presenting that cookie reads the same data
+  back from the `MemoryStore`; a handler that never touches `SessionUpdate`
+  causes no store write and no `Set-Cookie`; `.delete` removes the entry
+  from the store and expires the cookie; two independent `MemoryStore`
+  instances don't see each other's data (confirms the store is genuinely
+  per-instance, not global mutable state).
+- `Flash`: a message set on one request is readable as `Flash.message` on
+  the *next* request (simulated via two `check` calls sharing one
+  `MemoryStore`, feeding the second request's `Cookie` header from the
+  first response's `Set-Cookie`) and gone on the request after that
+  (one-request lifetime); a handler that sets a flash message *and* an
+  explicit `SessionUpdate.write` gets both merged into one persisted
+  session, not one clobbering the other.
+- A Plausible property test for the session-id generator: two consecutively
+  generated ids are never equal (cheap, meaningful sanity check on
+  `IO.getRandomBytes`-based generation — not a strength/entropy proof,
+  which would be testing the OS's RNG, not this code).
+- Per the standing lesson from the Stage 3/File.lean review: any theorem
+  only goes in `Tests/*.lean`, never in the `Middleware/*.lean` production
+  files, unless production code actually consumes it.
+- `lake build` and `lake test` clean from a from-scratch rebuild (`rm -rf
+  .lake/build`), no warnings, as final ground truth.
