@@ -1,0 +1,6 @@
+name = "middleware"
+version = "0.1.0"
+defaultTargets = ["Middleware"]
+
+[[lean_lib]]
+name = "Middleware"
