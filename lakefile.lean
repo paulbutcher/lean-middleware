@@ -11,7 +11,7 @@ open Lake DSL System
 def cDir : FilePath := __dir__ / "c"
 
 package middleware where
-  version := v!"0.1.0"
+  version := v!"0.2.0"
   testDriver := "tests"
   -- `libcrypto` for `Middleware.Crypto.AesGcm`'s OpenSSL FFI.
   moreLinkArgs := #["-lcrypto"]
