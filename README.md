@@ -18,12 +18,14 @@ def myApi : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "{}"
 
 def buildSecureApiServer : StatelessHandler :=
   Middleware.apply
-    [forwardedScheme Middleware.Header.Name.xForwardedProto, forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
-     hsts {},
-     catchAll (fun _ => pure ()),
-     sslRedirect {},
+    [forwardedScheme Middleware.Header.Name.xForwardedProto,
+     forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
+     hsts,
+     catchAll,
+     sslRedirect,
      params,
-     contentType "application/octet-stream", defaultCharset "utf-8",
+     contentType "application/octet-stream", 
+     defaultCharset "utf-8",
      notModified]
     myApi
 ```
@@ -39,18 +41,22 @@ def myApp : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "hel
 
 def buildSecureSiteServer (sessionStore : CookieStore) : StatelessHandler :=
   Middleware.apply
-    [forwardedScheme Middleware.Header.Name.xForwardedProto, forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
-     hsts {}, xFrameOptions .sameOrigin, xContentTypeOptions,
-     catchAll (fun _ => pure ()),
-     sslRedirect {},
+    [forwardedScheme Middleware.Header.Name.xForwardedProto,
+     forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
+     hsts, 
+     xFrameOptions .sameOrigin, xContentTypeOptions,
+     catchAll,
+     sslRedirect,
      cookies,
      session sessionStore
        { cookieName := "secure-ring-session",
          cookieAttrs := { path := some "/", httpOnly := true, secure := true } },
      flash,
-     params, multipartParams {},
+     params, 
+     multipartParams,
      antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Ring-Anti-Forgery") },
-     contentType "application/octet-stream", defaultCharset "utf-8",
+     contentType "application/octet-stream",
+     defaultCharset "utf-8",
      notModified]
     (file "public" myApp)
 ```
