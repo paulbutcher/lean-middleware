@@ -10,4 +10,6 @@ def main : IO Unit := do
   Tests.CatchAll.run
   Tests.ContentType.run
   Tests.Params.run
+  Tests.NotModified.run
+  Tests.File.run
   IO.println "All tests passed."
