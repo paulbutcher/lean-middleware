@@ -12,4 +12,5 @@ def main : IO Unit := do
   Tests.Params.run
   Tests.NotModified.run
   Tests.File.run
+  Tests.Multipart.run
   IO.println "All tests passed."

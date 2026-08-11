@@ -448,3 +448,237 @@ Everything after this point is a thin, ordinary (non-proved) layer:
   any array containing a literal `".."` element is always rejected.
 - `lake build` and `lake test` clean from the repo root, no warnings, as
   final ground truth.
+
+---
+
+# Stage 3: `multipart-params`
+
+## Status: implemented
+
+`lake build` and `lake test` pass clean from a from-scratch rebuild, no
+warnings. Delivered as designed: `Middleware/Multipart.lean`
+(`findAllOccurrences`, `parseParams`/`paramGet`, `boundaryOf`, `splitParts`,
+`splitHeadersAndContent`, `parseHeaderLines`, `PartContent`/`Part`,
+`routeStorage`, `buildPart`, `MultipartOptions`, `MultipartParams`,
+`multipartParams`) and `Tests/Multipart.lean` (field/file extraction,
+non-multipart passthrough, malformed-body rejection, `maxPartCount`/
+`maxPartSize` → 413, size-threshold spool-to-tempfile with post-request
+cleanup verification, two Plausible property tests for the byte scanner). No
+theorem was added to the production file — the termination argument for
+`findAllOccurrences` was fully discharged by the automatic `termination_by`
+proof search once structured right (see below); nothing beyond that needed
+proving to make the code work, so per the earlier lesson nothing extra was
+added to `Middleware/Multipart.lean` looking for a proof to attach.
+
+Bugs/gotchas caught only by the compiler or tests, worth remembering
+alongside the Stage 1/2 ones already on file:
+- **`termination_by` needs the recursion bound and the loop-advance step to
+  agree, not just "eventually decreases."** The first cut of
+  `findAllOccurrences` guarded recursion on `i + needle.size ≤ haystack.size`
+  (mirroring the plan's `isValidPercentEncoding` precedent too literally).
+  Lean couldn't prove `haystack.size - (i+1) < haystack.size - i` because
+  from the termination checker's local view `needle.size` could be `0`,
+  making `i = haystack.size` reachable while still satisfying the guard.
+  Fixed by decoupling the two concerns: recurse on the unconditional `i <
+  haystack.size` (always strictly progresses), and treat `i + needle.size ≤
+  haystack.size` as a separate, non-recursion-affecting side condition for
+  whether to attempt a match at that position. Same lesson as the monadic
+  `||` short-circuit bug from Stage 2 in spirit: don't fold a
+  correctness/bounds check into the same expression that's supposed to prove
+  termination.
+- **More reserved identifiers**: `prefix` is reserved (joining `meta` and
+  `matches` from Stage 2) — renamed to `pre` in the test file. Worth treating
+  "try a shorter/different local name" as a fast first move whenever a
+  plausible-looking identifier produces a bare parse error in this toolchain,
+  rather than assuming a typo.
+- `String.mk` is deprecated in this toolchain version in favor of
+  `String.ofList` — caught as a warning, not an error, so easy to miss
+  without checking `lean_diagnostic_messages` (the `<ide_diagnostics>` hook
+  surfaced it, but CLAUDE.md says to ignore that channel; the real
+  diagnostics call caught it too, just formatted differently).
+- Named-argument application on a `Middleware` value (`f (handler := x)`)
+  doesn't work for the same reason as Stage 1's `contentType` finding: the
+  type is a bare `StatelessHandler → StatelessHandler` arrow with no
+  parameter name visible at the call site, even though the underlying `fun
+  handler => ...` has one internally. Fix is always the same: supply
+  arguments positionally, using `{}` for an all-defaults options record
+  rather than trying to skip it by name.
+
+Not attempted this pass (unchanged from the plan): full RFC 2046 (preamble/
+epilogue/transport padding/nested multipart), streaming/chunk-incremental
+parsing (bounded instead by `Config.maxBodySize`, documented as a deliberate,
+honest limitation rather than engineered around).
+
+## Context
+
+Following Phase 1/2 and Stage 2 (see `PLAN.md` in the repo root for that
+history), this covers Stage 3: parsing `multipart/form-data` request bodies
+so applications built on this middleware can accept file uploads from
+standard HTML forms. Without it, `<input type="file">` submissions and any
+form mixing text fields with files simply can't be read at all —
+`application/x-www-form-urlencoded` (already handled by `params`) can't carry
+binary data, so multipart is the only path for that case.
+
+Checked ring-core's actual `multipart_params.clj` before scoping this: Ring
+does **no** RFC 2046 byte-parsing itself — it's a thin adapter around Apache
+Commons FileUpload (a Java library). There's no Lean equivalent to lean on,
+so the byte-level parser here is written from scratch. What *is* worth taking
+from Ring's design (confirmed with the user) rather than the parsing
+approach: a size-threshold storage split (small parts in memory, large ones
+spooled to a temp file) and configurable `maxPartSize`/`maxPartCount` limits
+with a `413` response, mirroring Ring's `max-file-size`/`max-file-count` +
+`content-too-large-handler`.
+
+Scope, confirmed with the user: the **pragmatic subset** of RFC 2046/7578 —
+boundary-delimited parts, `Content-Disposition` `name`/`filename`, optional
+per-part `Content-Type`. No preamble/epilogue, no transport padding, no
+nested multipart — none of which any real browser or HTTP client library
+emits, and encountering one just fails to parse (a safe rejection, not a
+misparse) rather than being silently mishandled.
+
+**Honest limitation to document, not engineer around:** this parses by
+draining the full request body into one `ByteArray` first (same strategy
+`params` already uses for the smaller `x-www-form-urlencoded` case), then
+splitting it into parts. The size-threshold spooling therefore protects
+against *many large parts accumulating in long-lived request-scoped memory*,
+not against *peak memory during the initial body read* — that read is
+already bounded by `Config.maxBodySize` (64 MiB default, enforced by the
+server core independently of this middleware), so it's a real ceiling, just
+not one this middleware adds on top. True chunk-incremental parsing (bounding
+peak memory to one chunk regardless of upload size) would need a stateful
+parser fed directly from `Body.Stream`, which is a materially bigger
+undertaking for a benefit that only matters above the existing 64 MiB cap —
+not worth it for this pass.
+
+Research findings (grounded against
+`/home/vscode/.elan/toolchains/leanprover--lean4---v4.33.0/src/lean`):
+
+- **No multipart parsing anywhere in `Std.Http`** (checked
+  `multipart|boundary|form-data|content-disposition` case-insensitively
+  across the whole tree — one unrelated hit, a comment about socket-close
+  framing). Building from scratch is the only option.
+- **No `ByteArray` subsequence search exists** in Lean core or `Std.Http`.
+  `ByteArray.findIdx?` (`Init/Data/ByteArray/Basic.lean:213`) is single-byte-
+  predicate only. `Std.Internal.Parsec.ByteArray`'s bounded scanners
+  (`takeWhileUpTo` etc., `Parsec/ByteArray.lean:290`) are predicate-based too,
+  and — worth noting since it cuts against "just imitate the stdlib" — those
+  combinators are themselves marked `partial` even though they take an
+  explicit bound, which is *not* the standard to follow here.
+- **The `partial`-free pattern to imitate instead**: `isValidPercentEncoding`
+  (`Std/Http/Data/URI/Encoding.lean:82-97`) — a local `rec loop (i : Nat)`,
+  bounds-checked via `if h : i < ba.size then ... else ...`, `termination_by
+  ba.size - i`, no `partial`, no manual `decreasing_by` needed (Lean
+  discharges it automatically). The boundary scanner here is structured the
+  same way: increment `i` by exactly 1 every step regardless of whether a
+  match was found at that position, so the termination argument stays this
+  simple rather than needing to reason about a "jump to next match" step.
+- **No structured `Content-Type` parameter parser exists** (`Content-Type`
+  is just `Header.Name.contentType`, a bare name constant — no value grammar
+  anywhere in `Std.Http.Data.Headers`). Reusable pieces for the `;
+  boundary=...` / `; name="..."; filename="..."` extraction this needs:
+  `Std.Http.Internal.unquoteHttpString?`/`quoteHttpString?`
+  (`Std/Http/Internal/String.lean:94-107, 42-77`, RFC 9110 quoted-string
+  handling) and `Std.Http.Internal.isToken` (same file, line 120). The
+  existing precedent for this kind of multi-part header value is plain
+  `String.split`, not a parser combinator — `parseTokenList` in
+  `Std/Http/Data/Headers/Basic.lean:53-59` does `v.value.split (· == ',')
+  |>.map (·.trimAscii)`; the `; key=value` extractor here follows the same
+  low-ceremony style.
+
+## Design
+
+### `Middleware/Multipart.lean`
+
+**Byte-level core (structurally recursive, no `partial`):**
+```
+def findAllOccurrences (haystack needle : ByteArray) : Array Nat :=
+  -- single Nat-indexed loop, i += 1 every step, checking
+  -- `haystack.extract i (i + needle.size) == needle` at each position;
+  -- termination_by haystack.size - i, same shape as isValidPercentEncoding.
+```
+Naive O(n·m) (re-slicing + `==` at every position) is deliberate, not an
+oversight — boundary strings are short (tens of bytes) and this isn't a hot
+path; a Boyer-Moore/KMP-style search would be real complexity for no
+measurable benefit here.
+
+Splitting: require the body start with the literal `--boundary` (dash-
+boundary, no leading CRLF — reject otherwise, matching the pragmatic-subset
+"fail safely" stance); find all occurrences of `\r\n--boundary` (the
+delimiter that closes one part and opens the next, the last occurrence being
+the close-delimiter); each part's raw byte range runs from just after the
+previous boundary line's own CRLF to the start of the next delimiter match.
+
+**Per-part parsing**: within a part's byte range, find the first `\r\n\r\n`
+(blank line) via the same `findAllOccurrences`/`findBytes`; the header block
+before it splits into `Name: Value` lines via `String.splitOn "\r\n"` (after
+UTF-8 decoding just that block — headers are always ASCII-safe text, unlike
+the arbitrary-binary content that follows). `Content-Disposition` is
+required (`form-data; name="..."; filename="..."` — the shared `; key=value`
+extractor handles both this and the boundary parameter); `Content-Type` is
+optional per part.
+
+**Storage**:
+```
+inductive PartContent where
+  | bytes (data : ByteArray)
+  | tempFile (path : System.FilePath) (size : Nat)
+
+structure Part where
+  name : String
+  filename : Option String
+  contentType : Option String
+  content : PartContent
+
+structure MultipartParams where
+  parts : List Part
+```
+Routed by `MultipartOptions.maxInMemoryPartSize` (default 1 MiB): at or under
+stays `.bytes`; over spools to a temp file via `IO.FS.createTempFile`
+(already used in `Middleware/File.lean`'s test fixtures, same primitive).
+
+**Limits**: `MultipartOptions { maxPartSize := 10 MiB, maxPartCount := 100,
+maxInMemoryPartSize := 1 MiB }`. Exceeding `maxPartSize` or `maxPartCount`
+short-circuits to a `413` response directly from the middleware (same
+pattern `catchAll` uses to short-circuit to `500` — doesn't call the inner
+handler), mirroring Ring's `max-file-size`/`max-file-count` +
+`content-too-large-handler`.
+
+**Cleanup**: temp-file-backed parts are removed after the wrapped handler
+returns (`try handler.onRequest req finally <remove any spooled temp
+files>`) — a file-upload handler is expected to persist what it needs
+*during* the request (read it, move it, stream it onward), not rely on it
+existing afterward. Documented explicitly since it's a real behavioral
+contract, not an implementation detail.
+
+**The middleware**: checks `Content-Type` for `multipart/form-data` (pass
+through unchanged if not); on match, drains the body, parses, and attaches a
+`MultipartParams` extension. Unlike `params`, does **not** replay/restore a
+readable body afterward — no real consumer re-parses a multipart body
+downstream, and reconstructing one from tempfile-spooled parts wouldn't be
+practically useful. This divergence from `params`'s behavior is documented on
+the middleware itself.
+
+## Verification
+
+- Per-file `mcp__lean-lsp__lean_diagnostic_messages` after each edit
+  (`lean_build` when imports change), same loop as prior stages.
+- Plausible property tests for `findAllOccurrences`: a needle placed at a
+  known generated position is always found there; a haystack with no needle
+  occurrence returns empty.
+- Hand-built raw multipart bodies (a text field + a file field, matching what
+  a real browser sends) verifying extracted `name`/`filename`/`contentType`/
+  content bytes.
+- `maxPartSize`/`maxPartCount` exceeded → `413`.
+- Size-threshold routing: a small part lands as `.bytes`; a part over
+  `maxInMemoryPartSize` lands as `.tempFile` with correct on-disk content,
+  and is gone after the wrapped handler returns.
+- Non-multipart request passes through unchanged; a body not starting with
+  the boundary is rejected safely rather than crashing.
+- `lake build` and `lake test` clean from the repo root, no warnings, as
+  final ground truth.
+- Per the lesson from the last review: any theorem here (if the termination
+  argument needs more than the automatic `termination_by` — unlikely given
+  the `isValidPercentEncoding` precedent, but if a correctness lemma beyond
+  termination ends up wanted) goes in `Tests/Multipart.lean`, not the
+  production file, unless something in `Middleware/Multipart.lean` itself
+  actually consumes it.
