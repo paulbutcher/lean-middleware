@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import Middleware.Cookies
 import Middleware.Session
 import Std.Http.Test.Helpers
+import Plausible
 
 open Std.Http
 open Std.Http.Server
@@ -109,6 +110,36 @@ def genSessionIdUniquenessTest : IO Unit := do
   unless ids.eraseDups.length == 20 do
     throw <| IO.userError s!"expected 20 distinct session ids, got duplicates in: {ids}"
 
+/-- Setting a key and immediately getting it back always recovers the value just set,
+regardless of what was already in the session. -/
+def setThenGetHolds (key value : String) (existing : List (String × String)) : Bool :=
+  (Session.set existing key value).get key == some value
+
+def setThenGetTest : IO Unit := do
+  match ← Plausible.Testable.checkIO
+      (Plausible.NamedBinder "key" <| ∀ key : String,
+       Plausible.NamedBinder "value" <| ∀ value : String,
+       Plausible.NamedBinder "existing" <| ∀ existing : List (String × String),
+       setThenGetHolds key value existing = true) with
+  | .success _ => pure ()
+  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
+  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
+
+/-- Setting then removing a key always leaves it absent, regardless of what was already in
+the session. -/
+def setRemoveThenGetHolds (key value : String) (existing : List (String × String)) : Bool :=
+  ((Session.set existing key value).remove key).get key == none
+
+def setRemoveThenGetTest : IO Unit := do
+  match ← Plausible.Testable.checkIO
+      (Plausible.NamedBinder "key" <| ∀ key : String,
+       Plausible.NamedBinder "value" <| ∀ value : String,
+       Plausible.NamedBinder "existing" <| ∀ existing : List (String × String),
+       setRemoveThenGetHolds key value existing = true) with
+  | .success _ => pure ()
+  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
+  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
+
 def run : IO Unit :=
   runGroup "Middleware.Session" do
     sessionRoundtripTest
@@ -118,5 +149,7 @@ def run : IO Unit :=
     customCookieNameTest
     genSessionIdShapeTest
     genSessionIdUniquenessTest
+    setThenGetTest
+    setRemoveThenGetTest
 
 end Tests.Session

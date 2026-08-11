@@ -40,11 +40,29 @@ def doesNotOverrideExistingTest : IO Unit :=
       assertContains response "Content-Type: application/json"
       assertAbsent response "text/plain"
 
+def presetContentTypeHandler (value : String) : StatelessHandler :=
+  { onRequest := fun _ =>
+      Response.ok.header Header.Name.contentType (Header.Value.ofString! value) |>.text "body" }
+
+/-- Whatever already-set `Content-Type` a handler produces, `contentType` leaves it alone --
+checked against a handful of varied values (not just the single `application/json`
+`doesNotOverrideExistingTest` already covers), on a request path whose extension would otherwise
+infer something different. -/
+def alreadySetContentTypeNeverClobberedTest : IO Unit := do
+  let values :=
+    [ "application/json", "text/x-custom; charset=utf-8", "application/vnd.api+json",
+      "x-foo/x-bar", "text/plain", "application/octet-stream" ]
+  for value in values do
+    check s!"an already-set Content-Type of {value.quote} is preserved" (mkGetClose "/style.css")
+      (contentType "application/octet-stream" (presetContentTypeHandler value)).onRequest
+      fun response => assertContains response s!"Content-Type: {value}"
+
 def run : IO Unit :=
   runGroup "Middleware.ContentType" do
     inferredFromExtensionTest
     fallsBackToDefaultTest
     noExtensionTest
     doesNotOverrideExistingTest
+    alreadySetContentTypeNeverClobberedTest
 
 end Tests.ContentType

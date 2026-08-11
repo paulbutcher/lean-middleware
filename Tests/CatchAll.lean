@@ -38,10 +38,28 @@ def onErrorCalledTest : IO Unit := do
   unless (← seen.get) do
     throw <| IO.userError "expected onError to run"
 
+/-- Whatever the thrown message says, the response is always exactly `500` with the fixed body
+`"Internal Server Error"` -- the original message never leaks into what the client sees. Checked
+against a handful of varied messages (empty, long, containing the fixed response text itself,
+punctuation/unicode), not just the single `"boom"` `caughtErrorTest` already covers. -/
+def errorMessageNeverLeaksTest : IO Unit := do
+  let messages :=
+    [ "", "boom", String.ofList (List.replicate 5000 'x'), "Internal Server Error",
+      "{\"secret\": \"leaked\"}", "unicode: 日本語 ✅", "line1\nline2\ttabbed" ]
+  for msg in messages do
+    let handler : StatelessHandler := { onRequest := fun _ => throw (IO.Error.userError msg) }
+    check s!"thrown message {msg.quote} never leaks" (mkGetClose)
+      (catchAll (fun _ => pure ()) handler).onRequest fun response => do
+        assertStatus response "HTTP/1.1 500"
+        assertContains response "Internal Server Error"
+        if msg != "" && msg != "Internal Server Error" then
+          assertAbsent response msg
+
 def run : IO Unit :=
   runGroup "Middleware.CatchAll" do
     caughtErrorTest
     passthroughTest
     onErrorCalledTest
+    errorMessageNeverLeaksTest
 
 end Tests.CatchAll

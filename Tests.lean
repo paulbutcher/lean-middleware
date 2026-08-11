@@ -10,3 +10,4 @@ import Tests.Multipart
 import Tests.Cookies
 import Tests.Session
 import Tests.Flash
+import Tests.Integration
