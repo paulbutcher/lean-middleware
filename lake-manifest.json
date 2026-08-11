@@ -1,0 +1,16 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/leanprover-community/plausible",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "b7eb3304aeae834b12dda98993a37f6a41f6f0bb",
+   "name": "plausible",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "v4.33.0",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "middleware",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

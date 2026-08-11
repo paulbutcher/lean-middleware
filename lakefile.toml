@@ -1,6 +1,19 @@
 name = "middleware"
 version = "0.1.0"
 defaultTargets = ["Middleware"]
+testDriver = "tests"
+
+[[require]]
+name = "plausible"
+git = "https://github.com/leanprover-community/plausible"
+rev = "v4.33.0"
 
 [[lean_lib]]
 name = "Middleware"
+
+[[lean_lib]]
+name = "Tests"
+
+[[lean_exe]]
+name = "tests"
+root = "Main"
