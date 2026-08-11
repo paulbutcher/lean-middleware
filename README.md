@@ -29,6 +29,18 @@ outermost-first.
 - `file` (`Middleware/File.lean`) -- serves static files from a root directory, with
   path-traversal protection, falling through to the wrapped handler for anything that isn't a
   real file under that root.
+- `xFrameOptions`, `xContentTypeOptions`, `xXssProtection`, `hsts`
+  (`Middleware/Security.lean`) -- static browser-security response headers
+  (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`,
+  `Strict-Transport-Security`).
+- `defaultCharset` (`Middleware/Charset.lean`) -- appends `; charset=...` to a text-based
+  `Content-Type` that doesn't already declare one.
+- `forwardedScheme`, `forwardedRemoteAddr` (`Middleware/Proxy.lean`) -- trust
+  `X-Forwarded-Proto`/`X-Forwarded-For` from a reverse proxy, since `Std.Http.Server` has no
+  built-in TLS support and so no native notion of request scheme at all.
+- `sslRedirect`, `absoluteRedirects` (`Middleware/Redirects.lean`) -- redirect `http` requests to
+  `https` (per `forwardedScheme`), and rewrite relative `Location` headers on redirect responses
+  to absolute ones.
 
 ## Usage
 
@@ -41,8 +53,15 @@ def myApp : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "hel
 
 def buildServer (sessionStore : MemoryStore) : StatelessHandler :=
   Middleware.apply
-    [catchAll, cookies, session sessionStore {}, flash, params,
-     contentType "application/octet-stream", notModified]
+    [forwardedScheme Middleware.Header.Name.xForwardedProto, forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
+     hsts {}, xFrameOptions .sameOrigin, xContentTypeOptions, xXssProtection .enabledBlock,
+     catchAll (fun _ => pure ()),
+     sslRedirect {},
+     cookies, session sessionStore {}, flash,
+     params,
+     absoluteRedirects,
+     contentType "application/octet-stream", defaultCharset "utf-8",
+     notModified]
     (file "public" myApp)
 ```
 

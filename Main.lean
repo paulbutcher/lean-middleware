@@ -16,5 +16,9 @@ def main : IO Unit := do
   Tests.Cookies.run
   Tests.Session.run
   Tests.Flash.run
+  Tests.Security.run
+  Tests.Charset.run
+  Tests.Proxy.run
+  Tests.Redirects.run
   Tests.Integration.run
   IO.println "All tests passed."

@@ -10,3 +10,7 @@ import Middleware.Multipart
 import Middleware.Cookies
 import Middleware.Session
 import Middleware.Flash
+import Middleware.Security
+import Middleware.Charset
+import Middleware.Proxy
+import Middleware.Redirects

@@ -10,4 +10,8 @@ import Tests.Multipart
 import Tests.Cookies
 import Tests.Session
 import Tests.Flash
+import Tests.Security
+import Tests.Charset
+import Tests.Proxy
+import Tests.Redirects
 import Tests.Integration

@@ -10,7 +10,8 @@ open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
 open Middleware (catchAll cookies session flash params contentType notModified file
-  multipartParams MemoryStore SessionStore SessionData SessionUpdate Params MultipartParams)
+  multipartParams MemoryStore SessionStore SessionData SessionUpdate Params MultipartParams
+  forwardedScheme sslRedirect hsts xFrameOptions HstsOptions SslRedirectOptions)
 
 namespace Tests.Integration
 
@@ -159,11 +160,35 @@ def multipartWithSessionTest : IO Unit := do
       assertContains response "title=hello"
       assertContains response "visited=yes"
 
+/-- An `http` request behind a simulated reverse proxy is redirected to `https` before any inner
+middleware runs at all -- proven by wrapping a handler that throws if it's ever reached. -/
+def sslRedirectShortCircuitsBeforeInnerStackTest : IO Unit :=
+  check "an http request is redirected before reaching a handler that would throw"
+    (mkGetClose "/secure")
+    (Middleware.apply
+      [forwardedScheme Middleware.Header.Name.xForwardedProto, sslRedirect ({} : SslRedirectOptions)]
+      throwingHandler).onRequest fun response => do
+      assertStatus response "HTTP/1.1 301"
+      assertContains response "Location: https://example.com/secure"
+
+/-- The security-header middlewares sit outside `catchAll` in the recommended order specifically
+so a `500` still carries them -- confirmed against the real `catchAll` short-circuit, not just
+each middleware in isolation. -/
+def securityHeadersSurviveCatchAllTest : IO Unit :=
+  check "hsts and X-Frame-Options still apply to a 500 produced by catchAll" (mkGetClose "/")
+    (Middleware.apply [hsts ({} : HstsOptions), xFrameOptions .sameOrigin, catchAll (fun _ => pure ())]
+      throwingHandler).onRequest fun response => do
+      assertStatus response "HTTP/1.1 500"
+      assertContains response "Strict-Transport-Security"
+      assertContains response "X-Frame-Options: SAMEORIGIN"
+
 def run : IO Unit :=
   runGroup "Integration" do
     fullStackParamsAndSessionTest
     catchAllShieldsSessionOnErrorTest
     realFileConditionalGetIntegrationTest
     multipartWithSessionTest
+    sslRedirectShortCircuitsBeforeInnerStackTest
+    securityHeadersSurviveCatchAllTest
 
 end Tests.Integration

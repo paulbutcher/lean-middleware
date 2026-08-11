@@ -30,15 +30,31 @@ Most applications using every middleware in this library should order them:
 
 ```
 Middleware.apply
-  [catchAll, cookies, session store, flash, params, contentType, notModified] (file root base)
+  [forwardedScheme, forwardedRemoteAddr,
+   hsts, xFrameOptions, xContentTypeOptions, xXssProtection,
+   catchAll,
+   sslRedirect,
+   cookies, session store, flash,
+   params, multipartParams,
+   absoluteRedirects,
+   contentType, defaultCharset,
+   notModified] (file root base)
 ```
 
 Each position follows from a dependency one of the middlewares actually has, not from
 convention:
 
-- `catchAll` outermost, so it sees a failure from *any* layer below it and can turn it into a
-  clean `500` instead of the connection tearing down. If it sat anywhere else, an exception
-  thrown above it would go uncaught.
+- `forwardedScheme`/`forwardedRemoteAddr` outermost of everything: nothing else can use
+  proxy-trusted request info before it's established, and establishing it can't itself fail, so
+  there's no reason to nest it inside anything else.
+- `hsts`/`xFrameOptions`/`xContentTypeOptions`/`xXssProtection` outside `catchAll`, deliberately,
+  so they still apply to a `500` response. If they sat inside `catchAll`, an error response would
+  ship with none of them.
+- `catchAll` next, so it sees a failure from *any* layer below it and can turn it into a clean
+  `500` instead of the connection tearing down. If it sat anywhere else, an exception thrown
+  above it would go uncaught.
+- `sslRedirect` outside `cookies`/`session`: no point running cookie or session logic against a
+  request that's about to be redirected away from entirely.
 - `cookies` next, before anything that reads or writes cookies. It's the only layer that turns
   a `SetCookies` accumulator into actual `Set-Cookie` wire headers, and the only one that parses
   the incoming `Cookie` header into the `Cookies` extension other middleware read.
@@ -50,10 +66,13 @@ convention:
 - `params`/`multipartParams` next -- request-body parsing, independent of the cookie/session
   layers above and of each other (they check disjoint `Content-Type`s and no-op otherwise, so
   using both together is safe if an application needs to accept either).
+- `absoluteRedirects` needs to see the real response's `Location` header, so it wraps everything
+  that might produce a redirect -- typically the application handler itself.
 - `contentType` and `notModified` must each wrap whatever actually produces the response body
   (typically `file`, or the application's own handler) -- both inspect headers on the *real*
   response (`Content-Type` presence, `ETag`/`Last-Modified`), which don't exist until that inner
-  layer runs.
+  layer runs. `defaultCharset` sits right outside `contentType`, finishing off whatever
+  `Content-Type` that middleware (or the handler) set.
 - `file` (or the application's own router) innermost: it falls through to whatever's inside it
   when a request path doesn't match a real file, so it needs to be the last thing before the
   application's own logic, not the first.
