@@ -16,7 +16,10 @@ outermost-first.
   `Set-Cookie` response headers, with full RFC 6265 attribute support (`Path`, `Domain`,
   `Max-Age`, `Expires`, `Secure`, `HttpOnly`, `SameSite`).
 - `session` (`Middleware/Session.lean`) -- server-side sessions keyed by a cookie, backed by a
-  pluggable `SessionStore` typeclass (a `MemoryStore` reference implementation is included).
+  pluggable `SessionStore` typeclass. Two implementations are included: `MemoryStore`, an
+  in-process table, and `CookieStore` (`Middleware/CookieStore.lean`), which keeps no server-side
+  state at all -- the session is AES-256-GCM sealed and the sealed blob itself is the cookie's
+  value.
 - `flash` (`Middleware/Flash.lean`) -- one-request-lifetime flash messages, layered on `session`.
 - `params` (`Middleware/Params.lean`) -- attaches query-string and
   `application/x-www-form-urlencoded` body parameters as a `Params` extension.
@@ -44,6 +47,11 @@ outermost-first.
 - `antiForgery` (`Middleware/AntiForgery.lean`) -- CSRF protection via a session-backed
   synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on
   any non-safe request. Requires `session` wrapped outer.
+
+## Native dependency
+
+Everything in this library is pure Lean except `CookieStore`, which links OpenSSL's `libcrypto`
+via FFI (`Middleware/Crypto/AesGcm.lean`, `c/aesgcm.cpp`) for AES-256-GCM.
 
 ## Usage
 

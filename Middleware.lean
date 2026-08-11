@@ -15,3 +15,6 @@ import Middleware.Charset
 import Middleware.Proxy
 import Middleware.Redirects
 import Middleware.AntiForgery
+import Middleware.Crypto.AesGcm
+import Middleware.Crypto.Base64
+import Middleware.CookieStore
