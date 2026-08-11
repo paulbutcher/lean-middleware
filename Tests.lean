@@ -14,4 +14,5 @@ import Tests.Security
 import Tests.Charset
 import Tests.Proxy
 import Tests.Redirects
+import Tests.AntiForgery
 import Tests.Integration

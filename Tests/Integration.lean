@@ -11,7 +11,8 @@ open Std.Http.Server
 open Std.Http.Internal.Test
 open Middleware (catchAll cookies session flash params contentType notModified file
   multipartParams MemoryStore SessionStore SessionData SessionUpdate Params MultipartParams
-  forwardedScheme sslRedirect hsts xFrameOptions HstsOptions SslRedirectOptions)
+  forwardedScheme sslRedirect hsts xFrameOptions HstsOptions SslRedirectOptions
+  antiForgery AntiForgeryToken)
 
 namespace Tests.Integration
 
@@ -182,6 +183,38 @@ def securityHeadersSurviveCatchAllTest : IO Unit :=
       assertContains response "Strict-Transport-Security"
       assertContains response "X-Frame-Options: SAMEORIGIN"
 
+def echoAntiForgeryTokenHandler : StatelessHandler :=
+  { onRequest := fun req => do
+      let token := (req.extensions.get AntiForgeryToken).map (·.value) |>.getD "<missing>"
+      Response.ok |>.text token }
+
+def reachedInnerHandler : StatelessHandler :=
+  { onRequest := fun _ => Response.ok |>.text "reached-inner" }
+
+/-- `cookies, session, params, antiForgery` composed end to end: a GET establishes a session and
+its token (read back via the `AntiForgeryToken` extension), a follow-up POST without it is
+rejected, and a POST echoing that token as a form field reaches the inner handler. -/
+def antiForgeryFullStackTest : IO Unit := do
+  let store ← MemoryStore.new
+  let stack := Middleware.apply [cookies, session store {}, params, antiForgery {}]
+  let cookieRef ← IO.mkRef (none : Option String)
+  let tokenRef ← IO.mkRef (none : Option String)
+  check "a GET establishes a session and its anti-forgery token" (mkGetClose "/")
+    (stack echoAntiForgeryTokenHandler).onRequest fun response => do
+      cookieRef.set (extractCookieValue response "lean-session")
+      tokenRef.set (some (String.fromUTF8! response |>.splitOn "\x0d\n\x0d\n" |>.getD 1 ""))
+  match ← cookieRef.get, ← tokenRef.get with
+  | none, _ => throw <| IO.userError "expected a Set-Cookie to be issued"
+  | _, none => throw <| IO.userError "expected a token body to be captured"
+  | some sid, some token =>
+    check "a POST without the token is rejected before reaching the inner handler"
+      (mkPost "/" "" s!"Cookie: lean-session={sid}\x0d\nConnection: close\x0d\n")
+      (stack paramsAndSessionHandler).onRequest fun response => assertStatus response "HTTP/1.1 403"
+    check "a POST echoing that token as a form field reaches the inner handler"
+      (mkPost "/" s!"__anti-forgery-token={token}"
+        s!"Content-Type: application/x-www-form-urlencoded\x0d\nCookie: lean-session={sid}\x0d\nConnection: close\x0d\n")
+      (stack reachedInnerHandler).onRequest fun response => assertContains response "reached-inner"
+
 def run : IO Unit :=
   runGroup "Integration" do
     fullStackParamsAndSessionTest
@@ -190,5 +223,6 @@ def run : IO Unit :=
     multipartWithSessionTest
     sslRedirectShortCircuitsBeforeInnerStackTest
     securityHeadersSurviveCatchAllTest
+    antiForgeryFullStackTest
 
 end Tests.Integration

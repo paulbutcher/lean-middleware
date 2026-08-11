@@ -41,6 +41,9 @@ outermost-first.
 - `sslRedirect`, `absoluteRedirects` (`Middleware/Redirects.lean`) -- redirect `http` requests to
   `https` (per `forwardedScheme`), and rewrite relative `Location` headers on redirect responses
   to absolute ones.
+- `antiForgery` (`Middleware/AntiForgery.lean`) -- CSRF protection via a session-backed
+  synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on
+  any non-safe request. Requires `session` wrapped outer.
 
 ## Usage
 
@@ -58,7 +61,7 @@ def buildServer (sessionStore : MemoryStore) : StatelessHandler :=
      catchAll (fun _ => pure ()),
      sslRedirect {},
      cookies, session sessionStore {}, flash,
-     params,
+     params, antiForgery {},
      absoluteRedirects,
      contentType "application/octet-stream", defaultCharset "utf-8",
      notModified]

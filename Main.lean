@@ -20,5 +20,6 @@ def main : IO Unit := do
   Tests.Charset.run
   Tests.Proxy.run
   Tests.Redirects.run
+  Tests.AntiForgery.run
   Tests.Integration.run
   IO.println "All tests passed."

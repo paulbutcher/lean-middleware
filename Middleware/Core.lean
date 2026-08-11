@@ -35,7 +35,7 @@ Middleware.apply
    catchAll,
    sslRedirect,
    cookies, session store, flash,
-   params, multipartParams,
+   params, multipartParams, antiForgery,
    absoluteRedirects,
    contentType, defaultCharset,
    notModified] (file root base)
@@ -66,6 +66,9 @@ convention:
 - `params`/`multipartParams` next -- request-body parsing, independent of the cookie/session
   layers above and of each other (they check disjoint `Content-Type`s and no-op otherwise, so
   using both together is safe if an application needs to accept either).
+- `antiForgery` right after `params`/`multipartParams`, since it reads a submitted token out of
+  whichever of those two extensions is present, and before the application handler so it can
+  short-circuit a request carrying a missing or wrong token without the handler ever running.
 - `absoluteRedirects` needs to see the real response's `Location` header, so it wraps everything
   that might produce a redirect -- typically the application handler itself.
 - `contentType` and `notModified` must each wrap whatever actually produces the response body

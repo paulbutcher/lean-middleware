@@ -14,3 +14,4 @@ import Middleware.Security
 import Middleware.Charset
 import Middleware.Proxy
 import Middleware.Redirects
+import Middleware.AntiForgery
