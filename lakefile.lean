@@ -7,7 +7,7 @@ import Lake
 
 open Lake DSL System
 
-/-- Where the hand-written C++ FFI shims live. -/
+/-- Where the hand-written C FFI shims live. -/
 def cDir : FilePath := __dir__ / "c"
 
 package middleware where
@@ -19,21 +19,26 @@ package middleware where
 require plausible from git
   "https://github.com/leanprover-community/plausible" @ "v4.33.0"
 
-/-- Compiles `c/aesgcm.cpp` against the Lean toolchain's bundled `clang` directly (not the
-`leanc` wrapper -- confirmed empirically that `leanc` fails to find `<cstddef>` for a genuine
-C++ source file, even given the same flags that make raw `clang` succeed; `leanc` is tuned for
-compiling Lean's own *generated* C, not arbitrary C++). Needs two extra hints raw `clang` also
-needs here: its bundled libc++-adjacent headers live under `include/clang` rather than the usual
-clang resource-dir layout, and it doesn't default to `libstdc++` even though that's what's
-installed on this system. -/
+/-- Compiles `c/aesgcm.c` against the Lean toolchain's bundled `clang` directly rather than
+through `leanc`/`buildLeanO`: those wire up `-nostdinc --sysroot <lean sysroot>`, which is right
+for Lean's own self-contained generated C but would also hide the system's `<openssl/*>` headers
+this shim needs. Needs one extra hint raw `clang` also needs here: its bundled compiler-builtin
+headers (`<stdbool.h>` etc.) live under `include/clang` rather than the usual clang resource-dir
+layout. On macOS this `clang` additionally needs an explicit SDK sysroot to find *any* system
+header at all (`<stdlib.h>` included); unlike Apple's own `clang` wrapper it won't discover one
+on its own, so it's obtained by hand via `xcrun`. -/
 target aesGcmO pkg : FilePath := do
   let oFile := pkg.buildDir / "c" / "aesgcm.o"
-  let srcJob ← inputTextFile (cDir / "aesgcm.cpp")
+  let srcJob ← inputTextFile (cDir / "aesgcm.c")
   let install ← getLeanInstall
+  let sysrootArgs ← if Platform.isOSX then do
+    let sdk ← IO.Process.output { cmd := "xcrun", args := #["--sdk", "macosx", "--show-sdk-path"] }
+    pure #["-isysroot", sdk.stdout.trimAscii.toString]
+  else
+    pure #[]
   let weakArgs := #[
     "-I", install.includeDir.toString,
-    "-I", (install.sysroot / "include" / "clang").toString,
-    "-stdlib=libstdc++", "-fPIC"]
+    "-I", (install.sysroot / "include" / "clang").toString] ++ sysrootArgs ++ #["-fPIC"]
   buildO oFile srcJob weakArgs #[] (install.sysroot / "bin" / "clang")
 
 extern_lib libaesgcm pkg := do

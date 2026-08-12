@@ -11,53 +11,50 @@
 #include <lean/lean.h>
 
 #include <openssl/evp.h>
-#include <cstdlib>
-#include <cstring>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
-namespace {
+static const size_t kKeyLen = 32;
+static const size_t kNonceLen = 12;
+static const size_t kTagLen = 16;
 
-constexpr size_t kKeyLen = 32;
-constexpr size_t kNonceLen = 12;
-constexpr size_t kTagLen = 16;
-
-lean_obj_res mk_byte_array(const unsigned char *data, size_t size) {
+static lean_obj_res mk_byte_array(const unsigned char *data, size_t size) {
     lean_object *arr = lean_alloc_sarray(1, size, size);
     if (size > 0) {
-        std::memcpy(lean_sarray_cptr(arr), data, size);
+        memcpy(lean_sarray_cptr(arr), data, size);
     }
     return arr;
 }
 
-lean_obj_res mk_none() {
+static lean_obj_res mk_none(void) {
     return lean_box(0);
 }
 
-lean_obj_res mk_some(lean_obj_arg value) {
+static lean_obj_res mk_some(lean_obj_arg value) {
     lean_object *r = lean_alloc_ctor(1, 1, 0);
     lean_ctor_set(r, 0, value);
     return r;
 }
 
-} // namespace
-
-extern "C" LEAN_EXPORT lean_obj_res lean_aes256_gcm_seal(
+LEAN_EXPORT lean_obj_res lean_aes256_gcm_seal(
     b_lean_obj_arg key, b_lean_obj_arg nonce, b_lean_obj_arg plaintext) {
     if (lean_sarray_size(key) != kKeyLen || lean_sarray_size(nonce) != kNonceLen) {
-        return mk_byte_array(nullptr, 0);
+        return mk_byte_array(NULL, 0);
     }
     size_t ptLen = lean_sarray_size(plaintext);
 
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
-        return mk_byte_array(nullptr, 0);
+        return mk_byte_array(NULL, 0);
     }
 
-    auto *out = static_cast<unsigned char *>(std::malloc(ptLen + kTagLen));
+    unsigned char *out = (unsigned char *)malloc(ptLen + kTagLen);
     int outl = 0;
     int tmplen = 0;
-    bool ok = EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)kNonceLen, nullptr) == 1;
-    ok = ok && EVP_EncryptInit_ex(ctx, nullptr, nullptr, lean_sarray_cptr(key), lean_sarray_cptr(nonce)) == 1;
+    bool ok = EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) == 1;
+    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)kNonceLen, NULL) == 1;
+    ok = ok && EVP_EncryptInit_ex(ctx, NULL, NULL, lean_sarray_cptr(key), lean_sarray_cptr(nonce)) == 1;
     ok = ok && EVP_EncryptUpdate(ctx, out, &outl, lean_sarray_cptr(plaintext), (int)ptLen) == 1;
     ok = ok && EVP_EncryptFinal_ex(ctx, out + outl, &tmplen) == 1;
     if (ok) {
@@ -69,12 +66,12 @@ extern "C" LEAN_EXPORT lean_obj_res lean_aes256_gcm_seal(
     }
     EVP_CIPHER_CTX_free(ctx);
 
-    lean_obj_res result = mk_byte_array(ok ? out : nullptr, ok ? (size_t)outl : 0);
-    std::free(out);
+    lean_obj_res result = mk_byte_array(ok ? out : NULL, ok ? (size_t)outl : 0);
+    free(out);
     return result;
 }
 
-extern "C" LEAN_EXPORT lean_obj_res lean_aes256_gcm_open(
+LEAN_EXPORT lean_obj_res lean_aes256_gcm_open(
     b_lean_obj_arg key, b_lean_obj_arg nonce, b_lean_obj_arg sealed) {
     size_t sealedLen = lean_sarray_size(sealed);
     if (lean_sarray_size(key) != kKeyLen || lean_sarray_size(nonce) != kNonceLen ||
@@ -90,12 +87,12 @@ extern "C" LEAN_EXPORT lean_obj_res lean_aes256_gcm_open(
         return mk_none();
     }
 
-    auto *out = static_cast<unsigned char *>(std::malloc(ctLen == 0 ? 1 : ctLen));
+    unsigned char *out = (unsigned char *)malloc(ctLen == 0 ? 1 : ctLen);
     int outl = 0;
     int tmplen = 0;
-    bool ok = EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)kNonceLen, nullptr) == 1;
-    ok = ok && EVP_DecryptInit_ex(ctx, nullptr, nullptr, lean_sarray_cptr(key), lean_sarray_cptr(nonce)) == 1;
+    bool ok = EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) == 1;
+    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)kNonceLen, NULL) == 1;
+    ok = ok && EVP_DecryptInit_ex(ctx, NULL, NULL, lean_sarray_cptr(key), lean_sarray_cptr(nonce)) == 1;
     ok = ok && EVP_DecryptUpdate(ctx, out, &outl, sealedPtr, (int)ctLen) == 1;
     ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, (int)kTagLen, tagPtr) == 1;
     ok = ok && EVP_DecryptFinal_ex(ctx, out + outl, &tmplen) == 1;
@@ -105,6 +102,6 @@ extern "C" LEAN_EXPORT lean_obj_res lean_aes256_gcm_open(
     EVP_CIPHER_CTX_free(ctx);
 
     lean_obj_res result = ok ? mk_some(mk_byte_array(out, (size_t)outl)) : mk_none();
-    std::free(out);
+    free(out);
     return result;
 }
