@@ -57,8 +57,9 @@ def buildSecureSiteServer (sessionStore : CookieStore) : StatelessHandler :=
      antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Ring-Anti-Forgery") },
      contentType "application/octet-stream",
      defaultCharset "utf-8",
-     notModified]
-    (file "public" myApp)
+     notModified,
+     file "public"]
+    myApp
 ```
 
 ## Middlewares
