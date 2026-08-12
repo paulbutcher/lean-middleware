@@ -87,9 +87,8 @@ def flashSurvivesIfConsumerDoesNotPersistTest : IO Unit := do
       (mkGet "/" s!"Cookie: lean-session={sid}\x0d\nConnection: close\x0d\n")
       (cookies (session store {} (flash readFlashHandler))).onRequest fun response =>
         assertContains response "hello"
-    check "so it's still there on the request after that too, matching Ring's documented \
-behavior: flash only clears from the store on a request whose response itself performs a \
-session write"
+    check "so it's still there on the request after that too: flash only clears from the store \
+on a request whose response itself performs a session write"
       (mkGet "/" s!"Cookie: lean-session={sid}\x0d\nConnection: close\x0d\n")
       (cookies (session store {} (flash readFlashHandler))).onRequest fun response =>
         assertContains response "hello"

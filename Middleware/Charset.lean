@@ -10,8 +10,8 @@ open Std.Http.Server
 
 namespace Middleware.Charset
 
-/-- Whether a `Content-Type` value is text-based enough to need a charset, mirroring Ring's own
-plain substring checks (not a full media-type grammar) -- `text/*` or `application/xml`. -/
+/-- Whether a `Content-Type` value is text-based enough to need a charset, using plain substring
+checks (not a full media-type grammar) -- `text/*` or `application/xml`. -/
 def isTextBased (contentType : String) : Bool :=
   let ct := contentType.toLower
   ct.startsWith "text/" || (ct.splitOn "application/xml").length > 1

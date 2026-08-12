@@ -46,10 +46,10 @@ def genSessionId : IO String := do
   let bytes ← IO.getRandomBytes 32
   pure (toHex bytes)
 
-/-- An in-memory `SessionStore`. Reference implementation, matching Ring's `MemoryStore`
-exactly: no expiry or eviction, so a long-lived process accumulates sessions forever unless
-something else deletes them. Fine for development, testing, or a single-process deployment with
-a bounded user base; anything else should implement its own `SessionStore`. -/
+/-- An in-memory `SessionStore`. No expiry or eviction, so a long-lived process accumulates
+sessions forever unless something else deletes them. Fine for development, testing, or a
+single-process deployment with a bounded user base; anything else should implement its own
+`SessionStore`. -/
 structure MemoryStore where
   ref : IO.Ref (List (String × Session))
 
@@ -69,7 +69,6 @@ instance : SessionStore MemoryStore where
 /-- Options for `session`. -/
 structure SessionOptions where
   cookieName : String := "lean-session"
-  /-- Matches Ring's session default of `{:path "/" :http-only true}`. -/
   cookieAttrs : CookieAttrs := { path := some "/", httpOnly := true }
 
 /-- The session loaded for this request (empty if no valid session cookie was presented). -/

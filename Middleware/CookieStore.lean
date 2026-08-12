@@ -66,16 +66,15 @@ end CookieStore
 structure CookieStoreOptions where
   /-- The AES-256 key to encrypt sessions with. `none` mints a fresh random one at
   `CookieStore.new` time -- convenient for development or a single-process deployment, but a
-  restart then invalidates every outstanding session, the same trade-off Ring's own cookie-store
-  default makes. A multi-instance or restart-tolerant deployment should configure one. -/
+  restart then invalidates every outstanding session. A multi-instance or restart-tolerant
+  deployment should configure one. -/
   key : Option ByteArray := none
 
 /-- A `SessionStore` that keeps no server-side state at all: the session data is serialized,
 AES-256-GCM sealed, and the sealed blob itself (base64-encoded) becomes the cookie's value.
 `read`/`write` treat the `String` `session` threads through as that value directly rather than as
 a lookup key into anything -- `SessionStore`'s signature already supports this (`MemoryStore`
-just happens to use it the other way), matching how Ring's own `SessionStore` protocol is generic
-between the two. -/
+just happens to use it the other way). -/
 structure CookieStore where
   key : ByteArray
 

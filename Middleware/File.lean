@@ -91,8 +91,8 @@ namespace Middleware
 /--
 Serves static files from `root`. On each request: resolves the path (rejecting traversal
 attempts, see `Middleware.File.joinSafeSegments`); if it doesn't resolve, doesn't exist, or is a
-directory, falls through to the inner handler (matching Ring's `wrap-file` -- this middleware
-doesn't own 404 handling). Otherwise streams the file with `Last-Modified` and a weak `ETag` set
+directory, falls through to the inner handler (this middleware doesn't own 404 handling).
+Otherwise streams the file with `Last-Modified` and a weak `ETag` set
 from its metadata.
 
 Deliberately does not set `Content-Type` itself -- compose `contentType` outside it

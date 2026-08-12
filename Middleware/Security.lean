@@ -27,7 +27,7 @@ private def setHeader (headers : Headers) (name : Header.Name) (value : String) 
   (headers.erase name).insert name (Header.Value.ofString! value)
 
 /-- `X-Frame-Options` (governs whether the page can be framed, a defense against clickjacking).
-Browser support for `allowFrom` is incomplete, matching Ring's own caveat. -/
+Browser support for `allowFrom` is incomplete. -/
 inductive FrameOptions where
   | deny
   | sameOrigin
@@ -57,7 +57,7 @@ def xContentTypeOptions : Middleware :=
         pure { resp with line := { resp.line with headers } } }
 
 /-- `X-XSS-Protection`, a legacy heuristic reflected-XSS filter most modern browsers have since
-removed, kept here only for parity with Ring (which still ships it for older clients). -/
+removed, kept here only for compatibility with older clients that still respect it. -/
 inductive XssProtection where
   | disabled
   | enabled
@@ -84,7 +84,7 @@ structure HstsOptions where
 
 /-- Sets `Strict-Transport-Security` (RFC 6797) on every response, unconditionally -- this
 middleware doesn't itself verify the connection is actually secure; enabling it is a deployment
-decision, same as Ring's `wrap-hsts`. -/
+decision. -/
 def hsts (options : HstsOptions := {}) : Middleware :=
   fun handler =>
     { handler with

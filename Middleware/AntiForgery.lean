@@ -23,8 +23,8 @@ private def antiForgeryKey : String := "__anti-forgery-token"
 
 /-- The anti-forgery token established for this request (an existing one from the session, or a
 freshly minted one): attached as a request extension for a handler to embed in a form or
-response. This codebase has no equivalent of Ring's dynamically-bound `*anti-forgery-token*` var,
-so an extension is the substitute, matching how `SessionData`/`Flash` are already delivered. -/
+response. This codebase has no dynamic-binding mechanism to stash a token in, so an extension is
+the substitute, matching how `SessionData`/`Flash` are already delivered. -/
 structure AntiForgeryToken where
   value : String
 deriving TypeName
@@ -76,10 +76,10 @@ private def requestToken (req : Request Body.Stream) (paramName : String) : Opti
 token matching the one established for its session, or `options.errorHandler` runs in place of the
 inner handler. The token is delivered to a validated request via the `AntiForgeryToken` extension.
 
-Layered directly on `SessionData`/`SessionUpdate`, the same way `flash` is -- not a pluggable
-strategy like Ring's `Strategy` protocol, since this codebase's session storage is already
-pluggable via `SessionStore` and a second abstraction on top of it isn't earning its keep for a
-single, obvious strategy. Requires `session` wrapped outer to have anything to check against; if
+Layered directly on `SessionData`/`SessionUpdate`, the same way `flash` is -- not behind a second
+pluggable strategy abstraction, since this codebase's session storage is already pluggable via
+`SessionStore` and a second layer on top of it isn't earning its keep for a single, obvious
+strategy. Requires `session` wrapped outer to have anything to check against; if
 it isn't, every non-safe request fails validation (no stored token can ever be produced to match
 against), i.e. this middleware **fails closed** without `session` -- the opposite default from
 every other middleware's graceful degradation, and deliberately so here. -/

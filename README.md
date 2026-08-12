@@ -54,7 +54,7 @@ def buildSecureSiteServer (sessionStore : CookieStore) : StatelessHandler :=
      flash,
      params, 
      multipartParams,
-     antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Ring-Anti-Forgery") },
+     antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Lean-Anti-Forgery") },
      contentType "application/octet-stream",
      defaultCharset "utf-8",
      notModified,

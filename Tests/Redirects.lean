@@ -74,10 +74,10 @@ def relativeLocationRewrittenTest : IO Unit :=
       (absoluteRedirects (redirectHandler .found "/target"))).onRequest fun response =>
       assertContains response "Location: https://example.com/target"
 
-/-- `308` isn't in Ring's redirect-status set (`#{201 301 302 303 307}`, deliberately excluding
-it) -- ported faithfully rather than "completed", so this is left untouched too. -/
+/-- `308` is deliberately excluded from `absoluteRedirects`'s redirect-status set
+(`201 301 302 303 307`), so this is left untouched too. -/
 def status308NotRewrittenTest : IO Unit :=
-  check "308 is left untouched, matching Ring's set exactly" (mkGetClose "/")
+  check "308 is left untouched" (mkGetClose "/")
     (absoluteRedirects (redirectHandler .permanentRedirect "/target")).onRequest fun response =>
       assertContains response "Location: /target"
 

@@ -43,10 +43,10 @@ def forwardedScheme (headerName : Header.Name := Header.Name.xForwardedProto) : 
           handler.onRequest { req with extensions := req.extensions.insert scheme } }
 
 /-- The client address a trusted reverse proxy reports, from the last comma-separated entry of
-`X-Forwarded-For` -- a single-hop-trusted-proxy assumption, same as Ring's own
-`wrap-forwarded-remote-addr`: safe only when exactly one proxy you trust sits directly in front
-of this server and unconditionally appends the real client address. A bare string, not
-`Std.Http.Server.RemoteAddr` (`Net.SocketAddress`), since `X-Forwarded-For` carries no port. -/
+`X-Forwarded-For` -- a single-hop-trusted-proxy assumption: safe only when exactly one proxy you
+trust sits directly in front of this server and unconditionally appends the real client address.
+A bare string, not `Std.Http.Server.RemoteAddr` (`Net.SocketAddress`), since `X-Forwarded-For`
+carries no port. -/
 structure ForwardedFor where
   addr : String
 deriving TypeName

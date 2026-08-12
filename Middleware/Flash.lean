@@ -29,7 +29,7 @@ already on the response (or, if none, the flash-stripped session read on the way
 `session` persists both in one write. A response that sets no `FlashMessage` passes through
 unchanged.
 
-Matches Ring's `wrap-flash` exactly, including a subtlety worth calling out: stripping `__flash`
+There's a subtlety worth calling out: stripping `__flash`
 only affects what *this* request and its response see, not the backing store. If a request reads
 a flash message but its response never touches `SessionUpdate` at all (no new flash, no other
 session write), nothing gets persisted, so the old flash message is still sitting in the stored
