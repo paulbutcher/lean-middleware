@@ -14,4 +14,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      # Builds and tests the `middleware` package. Its test driver also runs the
+      # `middleware-cookiestore` suite, but not that package's own `lake build`, so that is a
+      # separate step below.
       - uses: leanprover/lean-action@v1
+      - name: Build middleware-cookiestore
+        run: lake build
+        working-directory: cookiestore

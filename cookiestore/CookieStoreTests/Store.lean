@@ -3,7 +3,7 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.CookieStore
+import MiddlewareCookieStore
 import Middleware.Cookies
 import Std.Http.Test.Helpers
 import Plausible
@@ -14,7 +14,7 @@ open Std.Http.Internal.Test
 open Middleware (cookies session CookieStore SessionData SessionUpdate Session)
 open Middleware.CookieStore (serialize deserialize)
 
-namespace Tests.CookieStore
+namespace CookieStoreTests.Store
 
 /-- Extracts a cookie's raw wire value from a `Set-Cookie:` response line, if present. -/
 def extractCookieValue (response : ByteArray) (name : String) : Option String :=
@@ -165,4 +165,4 @@ def run : IO Unit :=
     truncatedBlobRejectedTest
     oversizedLengthPrefixRejectedTest
 
-end Tests.CookieStore
+end CookieStoreTests.Store

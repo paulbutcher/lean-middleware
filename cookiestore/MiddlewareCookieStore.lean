@@ -4,8 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
 import Middleware.Session
-import Middleware.Crypto.AesGcm
 import Middleware.Crypto.Base64
+import MiddlewareCookieStore.AesGcm
 
 namespace Middleware
 

@@ -34,6 +34,7 @@ def buildSecureApiServer : StatelessHandler :=
 
 ```lean
 import Middleware
+import MiddlewareCookieStore
 
 open Middleware
 
@@ -75,9 +76,9 @@ outermost-first.
   `Max-Age`, `Expires`, `Secure`, `HttpOnly`, `SameSite`).
 - `session` (`Middleware/Session.lean`): server-side sessions keyed by a cookie, backed by a
   pluggable `SessionStore` typeclass. Two implementations are included: `MemoryStore`, an
-  in-process table, and `CookieStore` (`Middleware/CookieStore.lean`), which keeps no server-side
-  state at all: the session is AES-256-GCM sealed and the sealed blob itself is the cookie's
-  value.
+  in-process table, and `CookieStore` (`cookiestore/MiddlewareCookieStore.lean`, in a separate
+  package -- see below), which keeps no server-side state at all: the session is AES-256-GCM
+  sealed and the sealed blob itself is the cookie's value.
 - `flash` (`Middleware/Flash.lean`): one-request-lifetime flash messages, layered on `session`.
 - `params` (`Middleware/Params.lean`): attaches query-string and
   `application/x-www-form-urlencoded` body parameters as a `Params` extension.
@@ -106,10 +107,30 @@ outermost-first.
   synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on
   any non-safe request. Requires `session` wrapped outer.
 
-## Native dependency
+## Packages
 
-Everything in this library is pure Lean except `CookieStore`, which links OpenSSL's `libcrypto`
-via FFI (`Middleware/Crypto/AesGcm.lean`, `c/aesgcm.cpp`) for AES-256-GCM.
+The repository holds two Lake packages:
+
+- **`middleware`** (repository root): everything documented above, pure Lean, no native
+  dependency.
+- **`middleware-cookiestore`** (`cookiestore/`): `CookieStore` alone, which links OpenSSL's
+  `libcrypto` via FFI (`cookiestore/MiddlewareCookieStore/AesGcm.lean`, `cookiestore/c/aesgcm.c`)
+  for AES-256-GCM.
+
+They are separate packages rather than separate libraries because Lake applies `moreLinkArgs` and
+`extern_lib` per *package*, to every executable linked against it, regardless of which modules
+were imported. A single package would therefore require OpenSSL of every client, including those
+using none of the encrypted-session machinery. Applications that want `CookieStore` require both
+packages:
+
+```lean
+require middleware from git "https://github.com/..." @ "main"
+require «middleware-cookiestore» from git "https://github.com/..." @ "main" / "cookiestore"
+```
+
+and `import MiddlewareCookieStore`. The module root differs from the others because Lake resolves
+each module name to exactly one package and the `Middleware.*` module tree belongs to
+`middleware`; the Lean namespaces are unchanged, so the type is still `Middleware.CookieStore`.
 
 ## Formal verification
 
@@ -131,7 +152,9 @@ via FFI (`Middleware/Crypto/AesGcm.lean`, `c/aesgcm.cpp`) for AES-256-GCM.
 
 ## Testing
 
-`lake test` runs the full suite: example-based tests per middleware, `Plausible` property tests
-where an invariant is worth checking but out of proportion to prove (Base64 and cookie-value
-round-trips, the `CookieStore` wire format), and `Tests/Integration.lean` for behavior that only
-shows up once multiple middlewares run together.
+`lake test` from the repository root runs both packages' suites: example-based tests per
+middleware, `Plausible` property tests where an invariant is worth checking but out of proportion
+to prove (Base64 and cookie-value round-trips, the `CookieStore` wire format), and
+`Tests/Integration.lean` for behavior that only shows up once multiple middlewares run together.
+The `middleware-cookiestore` suite lives in `cookiestore/CookieStoreTests/` and can also be run
+on its own with `lake test` from that directory.

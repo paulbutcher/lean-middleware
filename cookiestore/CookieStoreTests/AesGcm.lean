@@ -3,14 +3,13 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Crypto.AesGcm
+import MiddlewareCookieStore.AesGcm
 import Std.Http.Test.Helpers
-import Plausible
 
 open Middleware.Crypto
 open Std.Http.Internal.Test (runGroup)
 
-namespace Tests.Crypto.AesGcm
+namespace CookieStoreTests.AesGcm
 
 private def hexDigit (c : Char) : Nat :=
   if '0' ≤ c ∧ c ≤ '9' then c.toNat - '0'.toNat else (c.toNat - 'a'.toNat) + 10
@@ -131,4 +130,4 @@ def run : IO Unit :=
     wrongNonceRejectedTest
     emptyPlaintextRoundtripTest
 
-end Tests.Crypto.AesGcm
+end CookieStoreTests.AesGcm
