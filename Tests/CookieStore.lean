@@ -6,11 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import Middleware.CookieStore
 import Middleware.Cookies
 import Std.Http.Test.Helpers
+import Plausible
 
 open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
-open Middleware (cookies session CookieStore SessionData SessionUpdate)
+open Middleware (cookies session CookieStore SessionData SessionUpdate Session)
+open Middleware.CookieStore (serialize deserialize)
 
 namespace Tests.CookieStore
 
@@ -106,6 +108,51 @@ def deleteSessionTest : IO Unit := do
         assertContains response "deleted"
         assertContains response "Max-Age=0"
 
+def serializeRoundtripHolds (data : Session) : Bool :=
+  deserialize (serialize data) == some data
+
+def serializeRoundtripTest : IO Unit := do
+  match ← Plausible.Testable.checkIO
+      (Plausible.NamedBinder "data" <| ∀ data : List (String × String),
+        serializeRoundtripHolds data = true) with
+  | .success _ => pure ()
+  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
+  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
+
+/-- The whole point of the length-prefixed framing is that there's nothing to escape, so these
+are the keys and values a delimiter-based format would have got wrong. -/
+def awkwardKeysAndValuesRoundtripTest : IO Unit := do
+  let cases : List Session :=
+    [ [],
+      [("", "")],
+      [("k", "a;b"), ("k2", "a=b"), ("k3", "a&b+c")],
+      [("k", "line1\nline2\r\n")],
+      [("キー", "日本語の値 ✅")],
+      [("dup", "first"), ("dup", "second")],
+      [("k", String.ofList (List.replicate 5000 'x'))] ]
+  for data in cases do
+    unless serializeRoundtripHolds data do
+      throw <| IO.userError s!"session {repr data} did not survive serialize/deserialize"
+
+/-- Every proper prefix of a serialized session is rejected outright rather than deserializing to
+a partial session or reading past the end of the buffer. A tampered blob can't reach here in
+practice (`aes256GcmOpen` authenticates first), so this is the only thing exercising
+`deserialize`'s bounds checks at all. -/
+def truncatedBlobRejectedTest : IO Unit := do
+  let blob := serialize [("user", "alice"), ("role", "admin")]
+  for len in [0:blob.size] do
+    unless deserialize (blob.extract 0 len) == none do
+      throw <| IO.userError
+        s!"expected a {len}-byte truncation of a {blob.size}-byte blob to be rejected"
+
+/-- A length prefix pointing past the end of the buffer is rejected too, rather than being used
+as an unchecked index. -/
+def oversizedLengthPrefixRejectedTest : IO Unit := do
+  let blob := serialize [("user", "alice")]
+  let corrupted := ByteArray.mk (blob.toList.set 4 0xFF).toArray
+  unless deserialize corrupted == none do
+    throw <| IO.userError "expected a length prefix past the end of the buffer to be rejected"
+
 def run : IO Unit :=
   runGroup "Middleware.CookieStore" do
     sessionRoundtripTest
@@ -113,5 +160,9 @@ def run : IO Unit :=
     garbageCookieValueTest
     tamperedCookieRejectedTest
     deleteSessionTest
+    serializeRoundtripTest
+    awkwardKeysAndValuesRoundtripTest
+    truncatedBlobRejectedTest
+    oversizedLengthPrefixRejectedTest
 
 end Tests.CookieStore

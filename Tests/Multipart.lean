@@ -5,14 +5,83 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 import Middleware.Multipart
 import Std.Http.Test.Helpers
-import Plausible
 
 open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
 open Middleware (multipartParams MultipartOptions MultipartParams)
+open Middleware.Multipart (findAllOccurrences)
 
 namespace Tests.Multipart
+
+private theorem loop_sound (haystack needle : ByteArray) (i : Nat) (acc : Array Nat) :
+    (∀ j ∈ acc, j + needle.size ≤ haystack.size ∧
+        (haystack.extract j (j + needle.size) == needle) = true) →
+    ∀ j ∈ findAllOccurrences.loop haystack needle i acc,
+      j + needle.size ≤ haystack.size ∧
+        (haystack.extract j (j + needle.size) == needle) = true := by
+  fun_induction findAllOccurrences.loop haystack needle i acc with
+  | case1 i acc h acc' ih =>
+    intro hacc
+    refine ih fun j hj => ?_
+    simp only [acc'] at hj
+    split at hj
+    · rename_i hmatch
+      rcases Array.mem_push.mp hj with hj | rfl
+      · exact hacc j hj
+      · exact hmatch
+    · exact hacc j hj
+  | case2 i acc h => intro hacc; exact hacc
+
+private theorem loop_mem_of_mem (haystack needle : ByteArray) (i : Nat) (acc : Array Nat)
+    (x : Nat) : x ∈ acc → x ∈ findAllOccurrences.loop haystack needle i acc := by
+  fun_induction findAllOccurrences.loop haystack needle i acc with
+  | case1 i acc h acc' ih =>
+    intro hx
+    refine ih ?_
+    simp only [acc']
+    split
+    · exact Array.mem_push.mpr (Or.inl hx)
+    · exact hx
+  | case2 i acc h => intro hx; exact hx
+
+private theorem loop_complete (haystack needle : ByteArray) (i : Nat) (acc : Array Nat) (j : Nat)
+    (hij : i ≤ j) (hjs : j < haystack.size)
+    (hmatch : j + needle.size ≤ haystack.size ∧
+      (haystack.extract j (j + needle.size) == needle) = true) :
+    j ∈ findAllOccurrences.loop haystack needle i acc := by
+  fun_induction findAllOccurrences.loop haystack needle i acc with
+  | case1 i acc h acc' ih =>
+    rcases Nat.eq_or_lt_of_le hij with rfl | hlt
+    · refine loop_mem_of_mem _ _ _ _ _ ?_
+      simp only [acc']
+      rw [dif_pos hmatch]
+      exact Array.mem_push.mpr (Or.inr rfl)
+    · exact ih hlt
+  | case2 i acc h => exact absurd (Nat.lt_of_le_of_lt hij hjs) h
+
+/--
+`findAllOccurrences` reports exactly the in-bounds positions where `needle` really occurs:
+nothing spurious (which would make `splitParts` cut a part at a position that isn't a delimiter,
+splicing one part's content into another's) and nothing missed (which would silently merge two
+parts into one).
+-/
+theorem findAllOccurrences_mem_iff (haystack needle : ByteArray) (i : Nat) :
+    i ∈ findAllOccurrences haystack needle ↔
+      needle.isEmpty = false ∧ i + needle.size ≤ haystack.size ∧
+        (haystack.extract i (i + needle.size) == needle) = true := by
+  unfold findAllOccurrences
+  split
+  · rename_i hemp
+    simp [hemp]
+  · rename_i hemp
+    have hne : needle.isEmpty = false := by simpa using hemp
+    have hpos : 0 < needle.size := by
+      simp only [ByteArray.isEmpty, beq_eq_false_iff_ne, ne_eq] at hne
+      omega
+    refine ⟨fun h => ⟨hne, loop_sound haystack needle 0 #[] (by simp) i h⟩, ?_⟩
+    rintro ⟨-, hb, hm⟩
+    exact loop_complete haystack needle 0 #[] i (Nat.zero_le _) (by omega) ⟨hb, hm⟩
 
 def boundary : String := "----testBoundary123"
 
@@ -100,33 +169,6 @@ def sizeThresholdRoutingTest : IO Unit := do
     if ← path.pathExists then
       throw <| IO.userError s!"expected temp file {path} to be removed after the handler returns"
 
-def occurrenceHolds (prefixLen suffixLen : Nat) : Bool :=
-  let needle := "NEEDLE".toUTF8
-  let pre := (String.ofList (List.replicate (prefixLen % 50) 'a')).toUTF8
-  let suffix := (String.ofList (List.replicate (suffixLen % 50) 'b')).toUTF8
-  (Middleware.Multipart.findAllOccurrences (pre ++ needle ++ suffix) needle).contains pre.size
-
-def occurrenceFoundTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "prefixLen" <| ∀ prefixLen : Nat,
-       Plausible.NamedBinder "suffixLen" <| ∀ suffixLen : Nat,
-       occurrenceHolds prefixLen suffixLen = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
-def noOccurrenceHolds (len : Nat) : Bool :=
-  let needle := "NEEDLE".toUTF8
-  let haystack := (String.ofList (List.replicate (len % 50) 'z')).toUTF8
-  (Middleware.Multipart.findAllOccurrences haystack needle).isEmpty
-
-def noOccurrenceTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "len" <| ∀ len : Nat, noOccurrenceHolds len = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
 def run : IO Unit :=
   runGroup "Middleware.Multipart" do
     parsesFieldsAndFilesTest
@@ -135,7 +177,5 @@ def run : IO Unit :=
     tooManyPartsRejectedTest
     partTooLargeRejectedTest
     sizeThresholdRoutingTest
-    occurrenceFoundTest
-    noOccurrenceTest
 
 end Tests.Multipart

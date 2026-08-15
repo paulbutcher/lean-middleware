@@ -28,7 +28,7 @@ def isSafeSegment (s : String) : Bool :=
 Joins path segments into a root-relative path string, or `none` if any segment is unsafe (see
 `isSafeSegment`). Safe by construction: whenever this succeeds, every segment that went into it
 was safe, and the result is exactly their `/`-intercalation, nothing more -- see the
-`joinSafeSegments_eq` theorem in `Tests/File.lean` for the proof.
+`joinSafeSegments_eq_some_iff` theorem in `Tests/File.lean` for the proof.
 -/
 def joinSafeSegments (segments : Array String) : Option String :=
   if segments.all isSafeSegment then

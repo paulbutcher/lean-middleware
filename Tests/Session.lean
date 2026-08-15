@@ -6,7 +6,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import Middleware.Cookies
 import Middleware.Session
 import Std.Http.Test.Helpers
-import Plausible
 
 open Std.Http
 open Std.Http.Server
@@ -15,6 +14,36 @@ open Middleware (cookies session MemoryStore SessionData SessionUpdate SessionOp
   genSessionId)
 
 namespace Tests.Session
+
+private theorem find?_filter_ne (s : Session) (k k' : String) (h : k' ≠ k) :
+    (s.filter (·.fst != k)).find? (·.fst == k') = s.find? (·.fst == k') := by
+  induction s with
+  | nil => rfl
+  | cons hd tl ih =>
+    by_cases hk : hd.fst = k
+    · simp [hk, ih, Ne.symm h]
+    · by_cases hk' : hd.fst = k'
+      · simp [hk', h]
+      · simp [hk, hk', ih]
+
+theorem get_set_self (s : Session) (k v : String) : (Session.set s k v).get k = some v := by
+  simp [Session.set, Session.get]
+
+theorem get_remove_self (s : Session) (k : String) : (Session.remove s k).get k = none := by
+  simp [Session.remove, Session.get]
+
+/-- Writing one key never disturbs another, so the reserved keys `flash` and `antiForgery` keep
+inside the session survive an application's own writes, and vice versa. -/
+theorem get_set_of_ne (s : Session) (k k' v : String) (h : k' ≠ k) :
+    (Session.set s k v).get k' = s.get k' := by
+  simp [Session.set, Session.get, Ne.symm h, find?_filter_ne s k k' h]
+
+/-- Repeatedly writing the same key replaces rather than accumulates, so a long-lived session
+can't grow without bound. That matters most for `CookieStore`, where the whole session has to fit
+in a cookie. -/
+theorem set_set (s : Session) (k v₁ v₂ : String) :
+    Session.set (Session.set s k v₁) k v₂ = Session.set s k v₂ := by
+  simp [Session.set]
 
 /-- Extracts a cookie's raw wire value from a `Set-Cookie:` response line, if present. -/
 def extractCookieValue (response : ByteArray) (name : String) : Option String :=
@@ -110,36 +139,6 @@ def genSessionIdUniquenessTest : IO Unit := do
   unless ids.eraseDups.length == 20 do
     throw <| IO.userError s!"expected 20 distinct session ids, got duplicates in: {ids}"
 
-/-- Setting a key and immediately getting it back always recovers the value just set,
-regardless of what was already in the session. -/
-def setThenGetHolds (key value : String) (existing : List (String × String)) : Bool :=
-  (Session.set existing key value).get key == some value
-
-def setThenGetTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "key" <| ∀ key : String,
-       Plausible.NamedBinder "value" <| ∀ value : String,
-       Plausible.NamedBinder "existing" <| ∀ existing : List (String × String),
-       setThenGetHolds key value existing = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
-/-- Setting then removing a key always leaves it absent, regardless of what was already in
-the session. -/
-def setRemoveThenGetHolds (key value : String) (existing : List (String × String)) : Bool :=
-  ((Session.set existing key value).remove key).get key == none
-
-def setRemoveThenGetTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "key" <| ∀ key : String,
-       Plausible.NamedBinder "value" <| ∀ value : String,
-       Plausible.NamedBinder "existing" <| ∀ existing : List (String × String),
-       setRemoveThenGetHolds key value existing = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
 def run : IO Unit :=
   runGroup "Middleware.Session" do
     sessionRoundtripTest
@@ -149,7 +148,5 @@ def run : IO Unit :=
     customCookieNameTest
     genSessionIdShapeTest
     genSessionIdUniquenessTest
-    setThenGetTest
-    setRemoveThenGetTest
 
 end Tests.Session

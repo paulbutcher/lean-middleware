@@ -111,8 +111,27 @@ outermost-first.
 Everything in this library is pure Lean except `CookieStore`, which links OpenSSL's `libcrypto`
 via FFI (`Middleware/Crypto/AesGcm.lean`, `c/aesgcm.cpp`) for AES-256-GCM.
 
+## Formal verification
+
+- **Path traversal** (`Tests/File.lean`): `File.joinSafeSegments` succeeds exactly when every
+  segment is safe, and then returns exactly their `/`-intercalation, so a resolved path can never
+  escape the served root or gain a component that wasn't a segment of its own.
+- **Multipart splitting** (`Tests/Multipart.lean`): `Multipart.findAllOccurrences` reports
+  exactly the in-bounds positions where the delimiter really occurs, so `splitParts` can neither
+  cut a part at a false delimiter nor merge two parts by missing a real one.
+- **Session data** (`Tests/Session.lean`): reads see the last write to that key, writing one key
+  never disturbs another (so `flash` and `antiForgery`'s reserved keys coexist with an
+  application's own), and rewriting a key replaces rather than accumulates (so a `CookieStore`
+  session can't grow without bound).
+- **Stack composition** (`Tests/Core.lean`): `Middleware.apply` distributes over list append and
+  is unaffected by `Middleware.id`, so a stack can be split, regrouped, or have unused layers
+  dropped without changing what the rest of it means.
+- **ETag comparison** (`Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
+  and a tag listed anywhere in `If-None-Match` matches (RFC 9110 §8.8.3.2).
+
 ## Testing
 
 `lake test` runs the full suite: example-based tests per middleware, `Plausible` property tests
-where a genuine invariant exists (round-trips, non-clobbering, weak-match logic), and
-`Tests/Integration.lean` for behavior that only shows up once multiple middlewares run together.
+where an invariant is worth checking but out of proportion to prove (Base64 and cookie-value
+round-trips, the `CookieStore` wire format), and `Tests/Integration.lean` for behavior that only
+shows up once multiple middlewares run together.

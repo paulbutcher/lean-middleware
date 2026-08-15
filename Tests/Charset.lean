@@ -54,6 +54,17 @@ def leavesNoContentTypeTest : IO Unit :=
     (defaultCharset "utf-8" noContentTypeHandler).onRequest fun response =>
       assertAbsent response "charset"
 
+/-- Stacking `defaultCharset` twice is the accident an application makes by listing it in more
+than one place; the second pass has to see the first pass's own output as already-charsetted. -/
+def doubleApplicationAppendsOnceTest : IO Unit :=
+  check "running defaultCharset twice still yields exactly one charset parameter" (mkGetClose "/")
+    (defaultCharset "utf-8" (defaultCharset "utf-8" (withContentType "text/plain"))).onRequest
+    fun response => do
+      let text := String.fromUTF8! response
+      let occurrences := (text.splitOn "charset=").length - 1
+      unless occurrences == 1 do
+        throw <| IO.userError s!"expected exactly one charset parameter, found {occurrences} in:\n{text}"
+
 def run : IO Unit :=
   runGroup "Middleware.Charset" do
     appendsToPlainTextTest
@@ -61,5 +72,6 @@ def run : IO Unit :=
     leavesExistingCharsetTest
     leavesNonTextTypeTest
     leavesNoContentTypeTest
+    doubleApplicationAppendsOnceTest
 
 end Tests.Charset

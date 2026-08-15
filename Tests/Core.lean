@@ -12,6 +12,23 @@ open Std.Http.Internal.Test
 
 namespace Tests.Core
 
+/--
+A stack can be split anywhere and applied in pieces. This is what makes the ordering recommended
+in `Middleware.apply`'s documentation composable: an application can group its middleware however
+it likes, or drop the ones it doesn't use, and the relative order of what remains still means the
+same thing.
+-/
+theorem apply_append (mws₁ mws₂ : List Middleware) (base : StatelessHandler) :
+    Middleware.apply (mws₁ ++ mws₂) base = Middleware.apply mws₁ (Middleware.apply mws₂ base) := by
+  simp [Middleware.apply]
+
+theorem apply_nil (base : StatelessHandler) : Middleware.apply [] base = base := rfl
+
+/-- `Middleware.id` can sit anywhere in a stack without changing what that stack does, so it's
+usable as a placeholder for a conditionally-enabled layer. -/
+theorem apply_id_cons (mws : List Middleware) (base : StatelessHandler) :
+    Middleware.apply (Middleware.id :: mws) base = Middleware.apply mws base := rfl
+
 /-- Adds an `x-order` header on the way back out, recording when this layer ran. -/
 def markerMiddleware (name : String) : Middleware :=
   fun handler =>
@@ -40,14 +57,8 @@ def orderTest : IO Unit := do
     unless (beforeA.splitOn "X-Order: B").length > 1 do
       throw <| IO.userError s!"expected 'X-Order: B' before 'X-Order: A', got:\n{text.quote}"
 
-def idTest : IO Unit :=
-  check "id is a no-op" (mkGetClose) (Middleware.id { onRequest := baseHandler }).onRequest fun response => do
-    assertStatus response "HTTP/1.1 200"
-    assertContains response "base"
-
 def run : IO Unit :=
   runGroup "Middleware.Core" do
     orderTest
-    idTest
 
 end Tests.Core

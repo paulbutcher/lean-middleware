@@ -79,12 +79,13 @@ def attrsRenderedTest : IO Unit :=
       assertContains response "HttpOnly"
       assertContains response "SameSite=Lax"
 
-/-- `SetCookie.serialize` then `SetCookie.parse` recovers the original value, for any value at
-all -- including ones containing `;`, spaces, and other characters that aren't themselves valid
-`cookie-octet`, since `value` goes through `EncodedQueryParam` percent-encoding either way. -/
+/-- `SetCookie.serialize` then `SetCookie.parse` recovers the original value, and the serialized
+header still consists of exactly the one `name=value` part -- an application-supplied value can
+never smuggle in a `Set-Cookie` attribute of its own, whatever characters it contains. -/
 def cookieValueRoundtripHolds (value : String) : Bool :=
-  match SetCookie.parse (SetCookie.serialize { name := "x", value }).snd with
-  | some sc => sc.value == value
+  let wire := (SetCookie.serialize { name := "x", value }).snd
+  match SetCookie.parse wire with
+  | some sc => sc.value == value && (wire.value.splitOn ";").length == 1
   | none => false
 
 def cookieValueRoundtripTest : IO Unit := do
@@ -94,6 +95,17 @@ def cookieValueRoundtripTest : IO Unit := do
   | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
   | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
 
+/-- The same property against values chosen to attack it, since `Plausible`'s own generator is
+very unlikely to produce a value that looks like an attribute list in the first place. -/
+def craftedValuesCannotInjectAttributesTest : IO Unit := do
+  let values :=
+    [ "", "plain", "a; Domain=evil.example", "a; HttpOnly", "a=b; Path=/", "a,b",
+      "spaces and \"quotes\"", "%3B", "+", "already%20encoded" ]
+  for value in values do
+    unless cookieValueRoundtripHolds value do
+      let wire := (SetCookie.serialize { name := "x", value }).snd
+      throw <| IO.userError s!"value {value.quote} serialized unsafely as: {wire.value.quote}"
+
 def run : IO Unit :=
   runGroup "Middleware.Cookies" do
     parsesCookieHeaderTest
@@ -102,5 +114,6 @@ def run : IO Unit :=
     multipleSetCookiesProduceSeparateHeadersTest
     attrsRenderedTest
     cookieValueRoundtripTest
+    craftedValuesCannotInjectAttributesTest
 
 end Tests.Cookies

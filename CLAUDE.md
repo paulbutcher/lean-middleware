@@ -74,10 +74,21 @@ Project-specific guidance for Claude Code when working in this repo.
   so that they continue to work as the UI evolves.
 - When creating new code or functionality, always generate tests alongside it, as long
   as those tests comply with the rules above.
-- When creating tests, don't only think about traditional example and expected result
-  style tests. Also consider whether there would be value in property style tests (via
-  Lean's Plausible testing library) or theorems which can be proven.
-- Theorems which aren't necessary for the production code should be in test code.
+- Prefer the strongest form of test a claim admits: a proven theorem over a property
+  style test (via Lean's Plausible testing library) over an example and expected result.
+  Reach for a weaker form only when the stronger one is out of reach.
+- Write a theorem rather than a property when the claim is about a pure total function
+  and either the case analysis is finite (encodings, mappings between representations)
+  or a counterexample would corrupt output rather than merely look wrong (an invariant
+  that a file format or a wire format depends on).
+- Time-box the attempt. If a proof will not close in a few tries, fall back to a
+  property and record the obstacle in a comment, so that the next person knows it was
+  weighed and why it failed. Never leave `sorry` or an admitted goal: the build treats
+  warnings as errors, which is also why the `plausible` tactic cannot be used.
+- When changing a module that carries properties, re-ask whether each is now provable.
+  A property is a fallback, not a resting place.
+- Theorems which aren't necessary for the production code should be in test code. They
+  need no entry in `runAll`: compiling is passing.
 
 ## Lean Code
 

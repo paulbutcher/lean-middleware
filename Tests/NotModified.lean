@@ -5,14 +5,30 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 import Middleware.NotModified
 import Std.Http.Test.Helpers
-import Plausible
 
 open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
-open Middleware (notModified ETag LastModified)
+open Middleware (notModified ETag IfNoneMatch LastModified)
 
 namespace Tests.NotModified
+
+/-- Weak comparison (RFC 9110 §8.8.3.2) turns entirely on the opaque tag: two `ETag`s with the
+same `value` match whatever their `weak` flags say, and two with different values never do. -/
+theorem weakMatches_of_value_eq (value : String) (w₁ w₂ : Bool) :
+    ETag.weakMatches { value, weak := w₁ } { value, weak := w₂ } = true := by
+  simp [ETag.weakMatches]
+
+theorem weakMatches_eq_false_of_ne (a b : ETag) (h : a.value ≠ b.value) :
+    ETag.weakMatches a b = false := by
+  simp [ETag.weakMatches, h]
+
+/-- A tag listed anywhere in an `If-None-Match` list is enough to make the request conditional,
+so a client sending several cached validators gets a `304` for whichever one it still holds. -/
+theorem matchesTag_of_mem (ts : List ETag) (t e : ETag) (hm : t ∈ ts) (hv : t.value = e.value) :
+    IfNoneMatch.matchesTag (.tags ts) e = true := by
+  simp only [IfNoneMatch.matchesTag, List.any_eq_true, ETag.weakMatches, beq_iff_eq]
+  exact ⟨t, hm, hv⟩
 
 def resourceTimestamp : Std.Time.Timestamp :=
   .ofSecondsSinceUnixEpoch (.ofNat 1_000_000_000)
@@ -77,34 +93,6 @@ def ifNoneMatchPrecedenceTest : IO Unit :=
       assertStatus response "HTTP/1.1 200"
       assertContains response "hello"
 
-/-- Two `ETag`s with the same `value` always match under weak comparison, regardless of either
-side's `weak` flag -- that's the entire point of weak comparison (RFC 9110 §8.8.3.2). -/
-def weakMatchIgnoresWeakFlagHolds (value : String) (w1 w2 : Bool) : Bool :=
-  ETag.weakMatches { value, weak := w1 } { value, weak := w2 } == true
-
-def weakMatchIgnoresWeakFlagTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "value" <| ∀ value : String,
-       Plausible.NamedBinder "w1" <| ∀ w1 : Bool,
-       Plausible.NamedBinder "w2" <| ∀ w2 : Bool,
-       weakMatchIgnoresWeakFlagHolds value w1 w2 = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
-/-- Two `ETag`s with different `value`s never match, regardless of `weak` flags. -/
-def weakMatchDistinguishesValuesHolds (v1 v2 : String) : Bool :=
-  ETag.weakMatches { value := v1 } { value := v2 } == false
-
-def weakMatchDistinguishesValuesTest : IO Unit := do
-  match ← Plausible.Testable.checkIO
-      (Plausible.NamedBinder "v1" <| ∀ v1 : String,
-       Plausible.NamedBinder "v2" <| ∀ v2 : String,
-       v1 ≠ v2 → weakMatchDistinguishesValuesHolds v1 v2 = true) with
-  | .success _ => pure ()
-  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries without satisfying the guard"
-  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
-
 def run : IO Unit :=
   runGroup "Middleware.NotModified" do
     etagMatchTest
@@ -112,7 +100,5 @@ def run : IO Unit :=
     ifModifiedSinceEarlierTest
     ifModifiedSinceLaterTest
     ifNoneMatchPrecedenceTest
-    weakMatchIgnoresWeakFlagTest
-    weakMatchDistinguishesValuesTest
 
 end Tests.NotModified
