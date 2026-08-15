@@ -5,37 +5,24 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 import Lake
 
-open Lake DSL System
+open Lake DSL
 
 package middleware where
   version := v!"0.2.0"
 
-require plausible from git
-  "https://github.com/leanprover-community/plausible" @ "v4.33.0"
-
 @[default_target]
 lean_lib Middleware
 
-lean_lib Tests
-
-lean_exe tests where
-  root := `Main
-
-/-- Runs this package's own suite and then the `cookiestore` package's, so `lake test` from the
-repo root still covers everything despite the two being separate packages (see `cookiestore`'s
-own lakefile for why they are). -/
+/-- The suite lives in the `test` package, which is where the dependency on `Plausible` lives
+too. Running it from here keeps `lake test` at the repo root as the single entry point. -/
 @[test_driver]
-script «test-all» (args) do
+script tests (args) do
   let lake ← IO.appPath
-  let root ← IO.Process.spawn { cmd := lake.toString, args := #["exe", "tests"] ++ args.toArray }
-  let code ← root.wait
-  if code != 0 then
-    return code
-  let cookieStore ← IO.Process.spawn {
+  let suite ← IO.Process.spawn {
     cmd := lake.toString
     args := #["test"] ++ args.toArray
-    cwd := some "cookiestore"
+    cwd := some "test"
     env := #[("LEAN_PATH", none), ("LEAN_SRC_PATH", none), ("LAKE", none), ("LAKE_HOME", none),
       ("LAKE_PKG_URL_MAP", none), ("ELAN_TOOLCHAIN", none)]
   }
-  cookieStore.wait
+  suite.wait

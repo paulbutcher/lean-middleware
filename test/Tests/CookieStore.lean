@@ -14,7 +14,7 @@ open Std.Http.Internal.Test
 open Middleware (cookies session CookieStore SessionData SessionUpdate Session)
 open Middleware.CookieStore (serialize deserialize)
 
-namespace CookieStoreTests.Store
+namespace Tests.CookieStore
 
 /-- Extracts a cookie's raw wire value from a `Set-Cookie:` response line, if present. -/
 def extractCookieValue (response : ByteArray) (name : String) : Option String :=
@@ -165,4 +165,4 @@ def run : IO Unit :=
     truncatedBlobRejectedTest
     oversizedLengthPrefixRejectedTest
 
-end CookieStoreTests.Store
+end Tests.CookieStore

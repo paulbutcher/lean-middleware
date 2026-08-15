@@ -30,7 +30,6 @@ encrypted cookie sessions can avoid needing OpenSSL to build at all.
 -/
 package «middleware-cookiestore» where
   version := v!"0.2.0"
-  testDriver := "tests"
   -- `libcrypto` for `Middleware.Crypto.AesGcm`'s OpenSSL FFI.
   moreLinkArgs := #["-lcrypto"] ++ run_io do
     if Platform.isOSX then
@@ -39,9 +38,6 @@ package «middleware-cookiestore» where
       return #[]
 
 require middleware from ".."
-
-require plausible from git
-  "https://github.com/leanprover-community/plausible" @ "v4.33.0"
 
 /-- Compiles `c/aesgcm.c` against the Lean toolchain's bundled `clang` directly rather than
 through `leanc`/`buildLeanO`: those wire up `-nostdinc --sysroot <lean sysroot>`, which is right
@@ -77,8 +73,3 @@ resolves a module name to exactly one package, and the `Middleware.*` tree alrea
 `Middleware.Crypto`. -/
 @[default_target]
 lean_lib MiddlewareCookieStore
-
-lean_lib CookieStoreTests
-
-lean_exe tests where
-  root := `Main

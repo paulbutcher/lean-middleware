@@ -9,7 +9,7 @@ import Std.Http.Test.Helpers
 open Middleware.Crypto
 open Std.Http.Internal.Test (runGroup)
 
-namespace CookieStoreTests.AesGcm
+namespace Tests.Crypto.AesGcm
 
 private def hexDigit (c : Char) : Nat :=
   if '0' ≤ c ∧ c ≤ '9' then c.toNat - '0'.toNat else (c.toNat - 'a'.toNat) + 10
@@ -130,4 +130,4 @@ def run : IO Unit :=
     wrongNonceRejectedTest
     emptyPlaintextRoundtripTest
 
-end CookieStoreTests.AesGcm
+end Tests.Crypto.AesGcm

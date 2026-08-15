@@ -109,19 +109,20 @@ outermost-first.
 
 ## Packages
 
-The repository holds two Lake packages:
+The repository holds three Lake packages, split so that an application pays only for what it
+uses. Lake resolves a package's requirements transitively and applies `moreLinkArgs` and
+`extern_lib` per *package* to every executable linked against it, regardless of which modules
+were imported -- so anything a shipping package declares becomes every client's problem.
 
-- **`middleware`** (repository root): everything documented above, pure Lean, no native
-  dependency.
+- **`middleware`** (repository root): everything documented above, pure Lean. **No dependencies
+  at all**, Lake or native.
 - **`middleware-cookiestore`** (`cookiestore/`): `CookieStore` alone, which links OpenSSL's
   `libcrypto` via FFI (`cookiestore/MiddlewareCookieStore/AesGcm.lean`, `cookiestore/c/aesgcm.c`)
-  for AES-256-GCM.
+  for AES-256-GCM. Requires only `middleware`.
+- **`middleware-tests`** (`test/`): the whole test suite, and the only package that depends on
+  `Plausible`. Nothing ships it.
 
-They are separate packages rather than separate libraries because Lake applies `moreLinkArgs` and
-`extern_lib` per *package*, to every executable linked against it, regardless of which modules
-were imported. A single package would therefore require OpenSSL of every client, including those
-using none of the encrypted-session machinery. Applications that want `CookieStore` require both
-packages:
+Applications that want `CookieStore` require both shipping packages:
 
 ```lean
 require middleware from git "https://github.com/..." @ "main"
@@ -134,27 +135,26 @@ each module name to exactly one package and the `Middleware.*` module tree belon
 
 ## Formal verification
 
-- **Path traversal** (`Tests/File.lean`): `File.joinSafeSegments` succeeds exactly when every
+- **Path traversal** (`test/Tests/File.lean`): `File.joinSafeSegments` succeeds exactly when every
   segment is safe, and then returns exactly their `/`-intercalation, so a resolved path can never
   escape the served root or gain a component that wasn't a segment of its own.
-- **Multipart splitting** (`Tests/Multipart.lean`): `Multipart.findAllOccurrences` reports
+- **Multipart splitting** (`test/Tests/Multipart.lean`): `Multipart.findAllOccurrences` reports
   exactly the in-bounds positions where the delimiter really occurs, so `splitParts` can neither
   cut a part at a false delimiter nor merge two parts by missing a real one.
-- **Session data** (`Tests/Session.lean`): reads see the last write to that key, writing one key
+- **Session data** (`test/Tests/Session.lean`): reads see the last write to that key, writing one key
   never disturbs another (so `flash` and `antiForgery`'s reserved keys coexist with an
   application's own), and rewriting a key replaces rather than accumulates (so a `CookieStore`
   session can't grow without bound).
-- **Stack composition** (`Tests/Core.lean`): `Middleware.apply` distributes over list append and
+- **Stack composition** (`test/Tests/Core.lean`): `Middleware.apply` distributes over list append and
   is unaffected by `Middleware.id`, so a stack can be split, regrouped, or have unused layers
   dropped without changing what the rest of it means.
-- **ETag comparison** (`Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
+- **ETag comparison** (`test/Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
   and a tag listed anywhere in `If-None-Match` matches (RFC 9110 §8.8.3.2).
 
 ## Testing
 
-`lake test` from the repository root runs both packages' suites: example-based tests per
-middleware, `Plausible` property tests where an invariant is worth checking but out of proportion
-to prove (Base64 and cookie-value round-trips, the `CookieStore` wire format), and
-`Tests/Integration.lean` for behavior that only shows up once multiple middlewares run together.
-The `middleware-cookiestore` suite lives in `cookiestore/CookieStoreTests/` and can also be run
-on its own with `lake test` from that directory.
+`lake test` from the repository root runs the whole suite, which lives in `test/Tests/`:
+example-based tests per middleware, `Plausible` property tests where an invariant is worth
+checking but out of proportion to prove (Base64 and cookie-value round-trips, the `CookieStore`
+wire format), and `test/Tests/Integration.lean` for behavior that only shows up once multiple
+middlewares run together. It can also be run directly with `lake test` from `test/`.
