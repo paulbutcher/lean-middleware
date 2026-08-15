@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      # Builds `middleware` and runs its test driver, which in turn runs the `test` package's
-      # suite. Neither of those builds `middleware-cookiestore` on its own, so that gets a step
-      # of its own below.
+      # `lake test` builds and links all three packages, so no per-package build step is needed.
+      # `test` is set explicitly rather than left to `auto-config`, whose detection of an
+      # `@[test_driver]` script (as opposed to a `testDriver` package field) is undocumented; a
+      # silent failure to detect it would leave the workflow green while running nothing.
       - uses: leanprover/lean-action@v1
-      - name: Build middleware-cookiestore
-        run: lake build
-        working-directory: cookiestore
+        with:
+          test: true

@@ -109,18 +109,8 @@ outermost-first.
 
 ## Packages
 
-The repository holds three Lake packages, split so that an application pays only for what it
-uses. Lake resolves a package's requirements transitively and applies `moreLinkArgs` and
-`extern_lib` per *package* to every executable linked against it, regardless of which modules
-were imported -- so anything a shipping package declares becomes every client's problem.
-
-- **`middleware`** (repository root): everything documented above, pure Lean. **No dependencies
-  at all**, Lake or native.
-- **`middleware-cookiestore`** (`cookiestore/`): `CookieStore` alone, which links OpenSSL's
-  `libcrypto` via FFI (`cookiestore/MiddlewareCookieStore/AesGcm.lean`, `cookiestore/c/aesgcm.c`)
-  for AES-256-GCM. Requires only `middleware`.
-- **`middleware-tests`** (`test/`): the whole test suite, and the only package that depends on
-  `Plausible`. Nothing ships it.
+- **`middleware`**: everything apart from `CookieStore`.
+- **`middleware-cookiestore`**: `CookieStore` alone, which links OpenSSL's `libcrypto` via FFI.
 
 Applications that want `CookieStore` require both shipping packages:
 
@@ -128,10 +118,6 @@ Applications that want `CookieStore` require both shipping packages:
 require middleware from git "https://github.com/..." @ "main"
 require «middleware-cookiestore» from git "https://github.com/..." @ "main" / "cookiestore"
 ```
-
-and `import MiddlewareCookieStore`. The module root differs from the others because Lake resolves
-each module name to exactly one package and the `Middleware.*` module tree belongs to
-`middleware`; the Lean namespaces are unchanged, so the type is still `Middleware.CookieStore`.
 
 ## Formal verification
 
@@ -150,11 +136,3 @@ each module name to exactly one package and the `Middleware.*` module tree belon
   dropped without changing what the rest of it means.
 - **ETag comparison** (`test/Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
   and a tag listed anywhere in `If-None-Match` matches (RFC 9110 §8.8.3.2).
-
-## Testing
-
-`lake test` from the repository root runs the whole suite, which lives in `test/Tests/`:
-example-based tests per middleware, `Plausible` property tests where an invariant is worth
-checking but out of proportion to prove (Base64 and cookie-value round-trips, the `CookieStore`
-wire format), and `test/Tests/Integration.lean` for behavior that only shows up once multiple
-middlewares run together. It can also be run directly with `lake test` from `test/`.
