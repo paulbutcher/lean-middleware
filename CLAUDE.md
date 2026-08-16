@@ -62,6 +62,18 @@ Project-specific guidance for Claude Code when working in this repo.
 
 ## Testing
 
+- Nothing needed only for development, such as tests, test-only dependencies, or
+  benchmarks, may appear in the dependency graph a downstream consumer resolves.
+- Tests should be in a subproject called `test` with its own lakefile, which requires
+  the root package by path. The root lakefile carries a `@[test_driver]` script that
+  runs the subproject's tests as a child process:
+
+      @[test_driver]
+      script tests do
+        let child ← IO.Process.spawn
+          { cmd := "lake", args := #["test"], cwd := __dir__ / "test" }
+        child.wait
+
 - Don't write tests which wholely or largely restate literals from the source with no
   computation in between. Before adding a test, ask: could this fail from a real behavior
   regression, or only by retyping the expected value wrong? If only the latter, it's
@@ -93,3 +105,5 @@ Project-specific guidance for Claude Code when working in this repo.
 ## Lean Code
 
 - Never use a partial function unless it's absolutely essential.
+- Never use a function which might panic (typically indicated by an exclamation mark at
+  the end of the function name) unless it's absolution essential.

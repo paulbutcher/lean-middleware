@@ -26,10 +26,6 @@ end Params
 
 namespace ContentType.FormUrlEncoded
 
-/-- Replaces `application/x-www-form-urlencoded`'s `+`-for-space encoding with `%20`. -/
-private def unescapePlus (s : String) : String :=
-  String.intercalate "%20" (s.splitOn "+")
-
 /-- Parses an `application/x-www-form-urlencoded` body into a `URI.Query`. -/
 def parse (body : String) : URI.Query :=
   let pairs := if body.isEmpty then [] else body.splitOn "&"
@@ -39,13 +35,13 @@ def parse (body : String) : URI.Query :=
       match pair.splitOn "=" with
       | [] => acc
       | key :: rest =>
-        match URI.EncodedQueryParam.fromString? (unescapePlus key) with
+        match URI.EncodedQueryParam.fromString? key with
         | none => acc
         | some encodedKey =>
           match rest with
           | [] => acc.insertEncoded encodedKey none
           | _ =>
-            match URI.EncodedQueryParam.fromString? (unescapePlus (String.intercalate "=" rest)) with
+            match URI.EncodedQueryParam.fromString? (String.intercalate "=" rest) with
             | none => acc
             | some encodedValue => acc.insertEncoded encodedKey (some encodedValue)
 

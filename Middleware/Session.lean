@@ -33,11 +33,9 @@ class SessionStore (σ : Type) where
   write : σ → Option String → Session → IO String
   delete : σ → String → IO Unit
 
-private def hexDigit (n : UInt8) : Char :=
-  if n < 10 then Char.ofNat (n.toNat + '0'.toNat) else Char.ofNat (n.toNat - 10 + 'a'.toNat)
-
 private def toHex (bytes : ByteArray) : String :=
-  String.ofList (bytes.toList.flatMap fun b => [hexDigit (b / 16), hexDigit (b % 16)])
+  String.ofList (bytes.toList.flatMap fun b =>
+    [Char.ofNat (URI.hexDigit (b / 16)).toNat, Char.ofNat (URI.hexDigit (b % 16)).toNat])
 
 /-- Generates an unpredictable session id: 256 bits of OS entropy (`IO.getRandomBytes`, not the
 seeded general-purpose PRNG in `Init.Data.Random`, which is unsuitable for anything

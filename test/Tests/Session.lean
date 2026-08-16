@@ -131,8 +131,8 @@ def genSessionIdShapeTest : IO Unit := do
   let sid ← genSessionId
   unless sid.length == 64 do
     throw <| IO.userError s!"expected a 64-hex-char session id, got {sid.length} chars: {sid}"
-  unless sid.toList.all (fun c => c.isDigit || ('a' ≤ c ∧ c ≤ 'f')) do
-    throw <| IO.userError s!"expected only lowercase hex digits, got: {sid}"
+  unless sid.toList.all (fun c => c.isDigit || ('A' ≤ c ∧ c ≤ 'F')) do
+    throw <| IO.userError s!"expected only uppercase hex digits, got: {sid}"
 
 def genSessionIdUniquenessTest : IO Unit := do
   let ids ← (List.range 20).mapM fun _ => genSessionId
