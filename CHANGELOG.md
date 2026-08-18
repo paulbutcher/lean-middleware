@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+More consistent port handling.
+
 ## [0.4.0] - 2026-08-18
 
 `serverSpan`: OpenTelemetry `server` span around every request.

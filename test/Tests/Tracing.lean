@@ -173,6 +173,83 @@ def skippedRequestsProduceNoSpanTest : IO Unit := do
   expect (captured.spans.size == 1)
     s!"expected the skipped request to produce no span, got {captured.spans.size} spans"
 
+/-- Attaches `value` to every request, standing in for whatever normally supplies it: the server
+itself for `RemoteAddr`, `forwardedRemoteAddr` for `ForwardedFor`. -/
+def withExtension [TypeName α] (value : α) : Middleware := fun handler =>
+  { handler with
+    onRequest := fun req =>
+      handler.onRequest { req with extensions := req.extensions.insert value } }
+
+def forwarded (addr : String) : Middleware.ForwardedFor := { addr }
+
+def remoteV4 (a b c d : UInt8) (port : UInt16) : RemoteAddr :=
+  { addr := .v4 { addr := Std.Net.IPv4Addr.ofParts a b c d, port } }
+
+def remoteLoopbackV6 (port : UInt16) : RemoteAddr :=
+  { addr := .v6 { addr := Std.Net.IPv6Addr.ofParts 0 0 0 0 0 0 0 1, port } }
+
+def clientAddress? (span : SpanData) : Option Value :=
+  attr? span Middleware.Conventions.clientAddress
+
+def clientPort? (span : SpanData) : Option Value :=
+  attr? span Middleware.Conventions.clientPort
+
+def tracedSpan [TypeName α] (value : α) (options : ServerSpanOptions := {}) : IO SpanData := do
+  theSpan (← captureRequests [mkGetClose "/users/1"]
+    (withExtension value (serverSpan matchedRoute options (router okHandler))))
+
+/-- `X-Forwarded-For` carries no port, so a request that reached the server through a proxy gets
+an address and nothing else, rather than a port invented to fill the gap. -/
+def forwardedForRecordsAddressAloneTest : IO Unit := do
+  let span ← tracedSpan (forwarded "203.0.113.7")
+  expect (clientAddress? span == some (.str "203.0.113.7"))
+    s!"expected the header's address, got {repr (clientAddress? span)}"
+  expect (clientPort? span == none)
+    s!"expected no client.port from a source carrying none, got {repr (clientPort? span)}"
+
+/-- A connection knows both halves, and the conventions keep them apart: `client.address` is the
+address alone, `client.port` a separate integer. -/
+def remoteAddrSplitsAddressFromPortTest : IO Unit := do
+  let span ← tracedSpan (remoteV4 127 0 0 1 38620)
+  expect (clientAddress? span == some (.str "127.0.0.1"))
+    s!"expected the address alone, got {repr (clientAddress? span)}"
+  expect (clientPort? span == some (.int 38620))
+    s!"expected client.port carrying the port, got {repr (clientPort? span)}"
+
+/-- The shape of `client.address` used to depend on whether anything in front of the server set
+`X-Forwarded-For`: bare behind a proxy, `address:port` without one. Anything built on it
+therefore worked in one deployment and not the other. -/
+def clientAddressShapeIsIndependentOfItsSourceTest : IO Unit := do
+  let fromHeader ← tracedSpan (forwarded "203.0.113.7")
+  let fromConnection ← tracedSpan (remoteV4 203 0 113 7 38620)
+  expect (clientAddress? fromHeader == clientAddress? fromConnection)
+    s!"expected the same address from either source, got {repr (clientAddress? fromHeader)} \
+      and {repr (clientAddress? fromConnection)}"
+  for (source, span) in [("header", fromHeader), ("connection", fromConnection)] do
+    match clientAddress? span with
+    | some (.str addr) =>
+      expect (!addr.contains ':')
+        s!"expected no port on the client.address the {source} produced, got {addr.quote}"
+    | other => throw <| IO.userError s!"expected a client.address string, got {repr other}"
+
+/-- The brackets in `[addr]:port` belong to that combined spelling, not to a bare address. -/
+def ipv6ClientAddressIsUnbracketedTest : IO Unit := do
+  let span ← tracedSpan (remoteLoopbackV6 41234)
+  expect (clientAddress? span == some (.str "::1"))
+    s!"expected an unbracketed IPv6 address, got {repr (clientAddress? span)}"
+  expect (clientPort? span == some (.int 41234))
+    s!"expected client.port carrying the port, got {repr (clientPort? span)}"
+
+/-- One option governs both attributes; a separate switch for the port would be a distinction
+without a use. -/
+def recordClientAddressGovernsBothAttributesTest : IO Unit := do
+  let span ← tracedSpan (remoteV4 127 0 0 1 38620) { recordClientAddress := false }
+  expect (clientAddress? span == none)
+    s!"expected no client.address when opted out, got {repr (clientAddress? span)}"
+  expect (clientPort? span == none)
+    s!"expected no client.port when opted out, got {repr (clientPort? span)}"
+
+
 def run : IO Unit :=
   runGroup "Middleware.Tracing" do
     routeNamesCollapsePathParametersTest
@@ -182,5 +259,10 @@ def run : IO Unit :=
     onlyServerErrorsSetErrorStatusTest
     queryRecordedOnlyOnRequestTest
     skippedRequestsProduceNoSpanTest
+    forwardedForRecordsAddressAloneTest
+    remoteAddrSplitsAddressFromPortTest
+    clientAddressShapeIsIndependentOfItsSourceTest
+    ipv6ClientAddressIsUnbracketedTest
+    recordClientAddressGovernsBothAttributesTest
 
 end Tests.Tracing

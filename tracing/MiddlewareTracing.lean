@@ -25,6 +25,7 @@ def parentSpan (req : Request Body.Stream) : Option SpanContext :=
 namespace Conventions
 
 def clientAddress : String := "client.address"
+def clientPort : String := "client.port"
 def userAgentOriginal : String := "user_agent.original"
 
 end Conventions
@@ -37,15 +38,21 @@ structure ServerSpanOptions where
   /-- Record `url.query`. Off by default: a query string can carry credentials, and a span is
   usually kept for longer and read by more people than a request ever is. -/
   recordQuery : Bool := false
-  /-- Record `client.address`, from the `ForwardedFor` extension if `forwardedRemoteAddr`
-  attached one, else from the connection's own `RemoteAddr`. -/
+  /-- Record `client.address`, and `client.port` when the source carries one, from the
+  `ForwardedFor` extension if `forwardedRemoteAddr` attached one, else from the connection's own
+  `RemoteAddr`. A request that arrived through a proxy gets an address and no port, since
+  `X-Forwarded-For` carries none. -/
   recordClientAddress : Bool := true
   /-- Record `user_agent.original`. -/
   recordUserAgent : Bool := true
 
-private def clientAddress (req : Request Body.Stream) : Option String :=
-  (req.extensions.get ForwardedFor).map (·.addr)
-    <|> (req.extensions.get RemoteAddr).map toString
+/-- The conventions keep the address and the port apart, and `ToString RemoteAddr` joins them
+(`addr:port`, or `[addr]:port` for v6). An address with the port appended takes one value per
+connection rather than one per client, and matches nothing else keyed on a bare address. -/
+private def clientAddressAndPort (req : Request Body.Stream) : Option (String × Option UInt16) :=
+  (req.extensions.get ForwardedFor).map (fun forwarded => (forwarded.addr, none))
+    <|> (req.extensions.get RemoteAddr).map fun remote =>
+      (toString remote.addr.ipAddr, some remote.addr.port)
 
 /-- The convention's `url.query` is the query without its leading `?`, which is where
 `ToString URI.Query` differs from it. -/
@@ -63,8 +70,10 @@ private def requestAttrs (req : Request Body.Stream) (method : String)
     unless query.isEmpty do
       attrs := attrs ++ [(Telemetry.Conventions.urlQuery, Value.str query)]
   if options.recordClientAddress then
-    if let some addr := clientAddress req then
+    if let some (addr, port?) := clientAddressAndPort req then
       attrs := attrs ++ [(Conventions.clientAddress, Value.str addr)]
+      if let some port := port? then
+        attrs := attrs ++ [(Conventions.clientPort, Value.int port.toNat)]
   if options.recordUserAgent then
     if let some agent := req.line.headers.get? Header.Name.userAgent then
       attrs := attrs ++ [(Conventions.userAgentOriginal, Value.str agent.value)]
