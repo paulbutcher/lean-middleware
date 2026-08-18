@@ -19,6 +19,8 @@ require middleware from ".."
 
 require «middleware-cookiestore» from "../cookiestore"
 
+require «middleware-tracing» from "../tracing"
+
 require plausible from git
   "https://github.com/leanprover-community/plausible" @ "v4.33.0"
 

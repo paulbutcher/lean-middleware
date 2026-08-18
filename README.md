@@ -35,18 +35,21 @@ def buildSecureApiServer : StatelessHandler :=
 ```lean
 import Middleware
 import MiddlewareCookieStore
+import MiddlewareTracing
 
 open Middleware
 
 def myApp : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "hello" }
 
-def buildSecureSiteServer (sessionStore : CookieStore) : StatelessHandler :=
+def buildSecureSiteServer (sessionStore : CookieStore)
+    (matchedRoute : Extensions → Option String) : StatelessHandler :=
   Middleware.apply
     [forwardedScheme Middleware.Header.Name.xForwardedProto,
      forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
      hsts, 
      xFrameOptions .sameOrigin, xContentTypeOptions,
      catchAll,
+     serverSpan matchedRoute {},
      sslRedirect,
      cookies,
      session sessionStore
@@ -103,20 +106,44 @@ outermost-first.
 - `sslRedirect`, `absoluteRedirects` (`Middleware/Redirects.lean`): redirect `http` requests to
   `https` (per `forwardedScheme`), and rewrite relative `Location` headers on redirect responses
   to absolute ones.
+- `serverSpan` (`tracing/MiddlewareTracing.lean`): opens an OpenTelemetry `server` span around
+  every request.
 - `antiForgery` (`Middleware/AntiForgery.lean`): CSRF protection via a session-backed
   synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on
   any non-safe request. Requires `session` wrapped outer.
 
+## Tracing
+
+`serverSpan` opens an OpenTelemetry `server` span around every request and publishes its
+`SpanContext` into the request's extensions:
+
+```lean
+open Telemetry
+
+def loadUser (req : Request Body.Stream) (id : String) : TelemetryT IO User :=
+  withSpanContext (parentSpan req) do
+    spanning "db.query" (attrs := [(Conventions.dbOperationName, "SELECT")]) do
+      ...
+```
+
+`ServerSpanOptions` adds `client.address`, `user_agent.original` and, opt-in because a query
+string can carry credentials, `url.query`. Its `skip` predicate drops a request from tracing
+altogether, which is worth pointing at static assets to avoid every asset `file` serves
+becoming its own export.
+
 ## Packages
 
-- **`middleware`**: everything apart from `CookieStore`.
+- **`middleware`**: everything apart from `CookieStore` and `serverSpan`. Depends on nothing
+  beyond Lean core and Std.
 - **`middleware-cookiestore`**: `CookieStore` alone, which links OpenSSL's `libcrypto` via FFI.
+- **`middleware-tracing`**: `serverSpan` alone, which needs `telemetry`.
 
-Applications that want `CookieStore` require both shipping packages:
+Each is required separately, so an application pays for only what it uses:
 
 ```lean
 require middleware from git "https://github.com/..." @ "main"
 require «middleware-cookiestore» from git "https://github.com/..." @ "main" / "cookiestore"
+require «middleware-tracing» from git "https://github.com/..." @ "main" / "tracing"
 ```
 
 ## Formal verification

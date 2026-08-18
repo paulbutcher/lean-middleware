@@ -15,6 +15,7 @@ import Tests.Charset
 import Tests.Proxy
 import Tests.Redirects
 import Tests.AntiForgery
+import Tests.Tracing
 import Tests.Crypto.AesGcm
 import Tests.Crypto.Base64
 import Tests.CookieStore

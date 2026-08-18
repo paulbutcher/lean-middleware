@@ -33,6 +33,7 @@ Middleware.apply
   [forwardedScheme, forwardedRemoteAddr,
    hsts, xFrameOptions, xContentTypeOptions, xXssProtection,
    catchAll,
+   serverSpan routeName,
    sslRedirect,
    cookies, session store, flash,
    params, multipartParams, antiForgery,
@@ -53,6 +54,14 @@ convention:
 - `catchAll` next, so it sees a failure from *any* layer below it and can turn it into a clean
   `500` instead of the connection tearing down. If it sat anywhere else, an exception thrown
   above it would go uncaught.
+- `serverSpan` directly inside `catchAll`, so an exception from any layer below reaches its span
+  first: the span records status `error` and the message the exception carried before `catchAll`
+  turns it into a `500`. Outside `catchAll` the exception would already have become a response,
+  and the cause would be lost. The cost is that the layers above it go untimed -- all of them
+  header manipulation doing no I/O -- and that a span ending in an exception carries no
+  `http.response.status_code`, since no response came back to it. `serverSpan` ships in the
+  separate `middleware-tracing` package, so it can't be named here in code; an application that
+  requires that package slots it in at this position.
 - `sslRedirect` outside `cookies`/`session`: no point running cookie or session logic against a
   request that's about to be redirected away from entirely.
 - `cookies` next, before anything that reads or writes cookies. It's the only layer that turns
