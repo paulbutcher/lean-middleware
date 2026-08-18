@@ -14,6 +14,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # `middleware-tracing` requires `telemetry`, whose OTLP exporter binds to `libcurl` through
+      # `leancurl`. Building the library alone doesn't reach it, but the test suite does, via
+      # `Telemetry.Testing`. Neither runner image carries what `leancurl`'s `pkg-config --cflags
+      # libcurl` needs: Linux is missing the development package, macOS `pkg-config` itself.
+      - name: Install libcurl development files
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libcurl4-openssl-dev
+
+      - name: Install pkg-config
+        if: runner.os == 'macOS'
+        run: brew install pkgconf
       # `lake test` builds and links all three packages, so no per-package build step is needed.
       # `test` is set explicitly rather than left to `auto-config`, whose detection of an
       # `@[test_driver]` script (as opposed to a `testDriver` package field) is undocumented; a
