@@ -14,7 +14,7 @@ open Lake DSL
 Keeping it here is what makes tracing opt-in.
 -/
 package «middleware-tracing» where
-  version := v!"0.4.0"
+  version := v!"0.5.0"
 
 require middleware from ".."
 
