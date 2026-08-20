@@ -3,7 +3,11 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Core
+module
+
+public import Middleware.Core
+
+public section
 
 open Std.Http
 open Std.Http.Server
@@ -16,7 +20,7 @@ regardless of whether a match was found there, so termination is the same simple
 increases, bounded by `haystack.size`" argument `Std.Http.URI.isValidPercentEncoding` uses --
 deliberately not a "jump to the next match" search, which would need a harder termination proof.
 -/
-def findAllOccurrences (haystack needle : ByteArray) : Array Nat :=
+@[expose] def findAllOccurrences (haystack needle : ByteArray) : Array Nat :=
   if needle.isEmpty then
     #[]
   else

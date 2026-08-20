@@ -3,9 +3,13 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Params
-import Std.Http.Test.Helpers
-import Plausible
+module
+
+public import Middleware.Params
+public import Std.Http.Test.Helpers
+public import Plausible
+
+public section
 
 open Std.Http
 open Std.Http.Server

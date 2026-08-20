@@ -3,8 +3,12 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Core
-import Std.Time
+module
+
+public import Middleware.Core
+public import Std.Time
+
+public section
 
 open Std.Http
 open Std.Http.Server
@@ -52,7 +56,7 @@ def serialize (e : ETag) : Header.Name × Header.Value :=
 instance : Header ETag := ⟨parse, serialize⟩
 
 /-- Weak comparison (RFC 9110 §8.8.3.2): equal iff the opaque tags are equal, ignoring `weak`. -/
-def weakMatches (a b : ETag) : Bool :=
+@[expose] def weakMatches (a b : ETag) : Bool :=
   a.value == b.value
 
 end ETag
@@ -120,7 +124,7 @@ def serialize (i : IfNoneMatch) : Header.Name × Header.Value :=
 instance : Header IfNoneMatch := ⟨parse, serialize⟩
 
 /-- Whether `e` matches this `If-None-Match` value under weak comparison. -/
-def matchesTag (i : IfNoneMatch) (e : ETag) : Bool :=
+@[expose] def matchesTag (i : IfNoneMatch) (e : ETag) : Bool :=
   match i with
   | .any => true
   | .tags ts => ts.any (ETag.weakMatches · e)

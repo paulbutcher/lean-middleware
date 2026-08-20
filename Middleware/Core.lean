@@ -3,7 +3,11 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Std.Http.Server
+module
+
+public import Std.Http.Server
+
+public section
 
 open Std.Http
 open Std.Http.Server
@@ -17,7 +21,7 @@ abbrev Middleware := StatelessHandler → StatelessHandler
 namespace Middleware
 
 /-- Leaves the handler unchanged. -/
-def id : Middleware := fun handler => handler
+@[expose] def id : Middleware := fun handler => handler
 
 /--
 Applies a stack of middleware to a base handler. The first element of `mws` becomes the
@@ -92,7 +96,7 @@ convention:
 An application that only uses some of these middlewares can drop the rest from the list; the
 relative order among what's left still holds.
 -/
-def apply (mws : List Middleware) (base : StatelessHandler) : StatelessHandler :=
+@[expose] def apply (mws : List Middleware) (base : StatelessHandler) : StatelessHandler :=
   mws.foldr (fun mw acc => mw acc) base
 
 end Middleware

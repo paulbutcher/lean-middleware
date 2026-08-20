@@ -3,10 +3,14 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Cookies
-import Middleware.Session
-import Middleware.Flash
-import Std.Http.Test.Helpers
+module
+
+public import Middleware.Cookies
+public import Middleware.Session
+public import Middleware.Flash
+public import Std.Http.Test.Helpers
+
+public section
 
 open Std.Http
 open Std.Http.Server

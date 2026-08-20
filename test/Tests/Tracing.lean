@@ -3,10 +3,14 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.CatchAll
-import MiddlewareTracing
-import Std.Http.Test.Helpers
-import Telemetry.Testing
+module
+
+public import Middleware.CatchAll
+public import MiddlewareTracing
+public import Std.Http.Test.Helpers
+public import Telemetry.Testing
+
+public section
 
 open Std.Http
 open Std.Http.Server

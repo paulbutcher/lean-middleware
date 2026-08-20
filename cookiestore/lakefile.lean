@@ -29,7 +29,7 @@ them here rather than in `middleware` is therefore the only way an application t
 encrypted cookie sessions can avoid needing OpenSSL to build at all.
 -/
 package «middleware-cookiestore» where
-  version := v!"0.5.0"
+  version := v!"0.6.0"
   -- `libcrypto` for `Middleware.Crypto.AesGcm`'s OpenSSL FFI.
   moreLinkArgs := #["-lcrypto"] ++ run_io do
     if Platform.isOSX then

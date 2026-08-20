@@ -3,9 +3,13 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Session
-import Middleware.Params
-import Middleware.Multipart
+module
+
+public import Middleware.Session
+public import Middleware.Params
+public import Middleware.Multipart
+
+public section
 
 open Std.Http
 open Std.Http.Server

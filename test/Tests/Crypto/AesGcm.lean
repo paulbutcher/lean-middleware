@@ -3,8 +3,12 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import MiddlewareCookieStore.AesGcm
-import Std.Http.Test.Helpers
+module
+
+public import MiddlewareCookieStore.AesGcm
+public import Std.Http.Test.Helpers
+
+public section
 
 open Middleware.Crypto
 open Std.Http.Internal.Test (runGroup)

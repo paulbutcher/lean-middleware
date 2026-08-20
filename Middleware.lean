@@ -1,18 +1,23 @@
--- This module serves as the root of the `Middleware` library.
--- Import modules here that should be built as part of the library.
-import Middleware.Core
-import Middleware.CatchAll
-import Middleware.ContentType
-import Middleware.Params
-import Middleware.NotModified
-import Middleware.File
-import Middleware.Multipart
-import Middleware.Cookies
-import Middleware.Session
-import Middleware.Flash
-import Middleware.Security
-import Middleware.Charset
-import Middleware.Proxy
-import Middleware.Redirects
-import Middleware.AntiForgery
-import Middleware.Crypto.Base64
+/-
+Copyright (c) 2026 Paul Butcher. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+
+module
+
+public import Middleware.Core
+public import Middleware.CatchAll
+public import Middleware.ContentType
+public import Middleware.Params
+public import Middleware.NotModified
+public import Middleware.File
+public import Middleware.Multipart
+public import Middleware.Cookies
+public import Middleware.Session
+public import Middleware.Flash
+public import Middleware.Security
+public import Middleware.Charset
+public import Middleware.Proxy
+public import Middleware.Redirects
+public import Middleware.AntiForgery
+public import Middleware.Crypto.Base64

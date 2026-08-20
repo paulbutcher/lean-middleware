@@ -3,6 +3,10 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
+module
+
+public section
+
 namespace Middleware.Crypto
 
 /-- Seals `plaintext` under AES-256-GCM with the given `key` (32 bytes) and `nonce` (12 bytes),

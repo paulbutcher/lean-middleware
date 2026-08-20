@@ -3,8 +3,12 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Multipart
-import Std.Http.Test.Helpers
+module
+
+public import Middleware.Multipart
+public import Std.Http.Test.Helpers
+
+public section
 
 open Std.Http
 open Std.Http.Server

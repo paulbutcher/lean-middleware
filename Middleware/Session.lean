@@ -3,7 +3,11 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Cookies
+module
+
+public import Middleware.Cookies
+
+public section
 
 open Std.Http
 open Std.Http.Server
@@ -15,13 +19,13 @@ abbrev Session := List (String × String)
 
 namespace Session
 
-def get (s : Session) (key : String) : Option String :=
+@[expose] def get (s : Session) (key : String) : Option String :=
   (s.find? (·.fst == key)).map Prod.snd
 
-def set (s : Session) (key value : String) : Session :=
+@[expose] def set (s : Session) (key value : String) : Session :=
   (key, value) :: s.filter (·.fst != key)
 
-def remove (s : Session) (key : String) : Session :=
+@[expose] def remove (s : Session) (key : String) : Session :=
   s.filter (·.fst != key)
 
 end Session

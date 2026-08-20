@@ -3,8 +3,12 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
-import Middleware.Core
-import Middleware.NotModified
+module
+
+public import Middleware.Core
+public import Middleware.NotModified
+
+public section
 
 open Std.Http
 open Std.Http.Server
@@ -21,7 +25,7 @@ collapses dot-segments by comparing each segment's *wire* (percent-encoded) form
 literal strings `.`/`..`, so a percent-encoded `%2e%2e` sails through unnoticed and only becomes
 a literal `..` when decoded afterwards, downstream of the check meant to catch it.
 -/
-def isSafeSegment (s : String) : Bool :=
+@[expose] def isSafeSegment (s : String) : Bool :=
   !s.isEmpty && s != "." && s != ".." && s.toList.all (fun c => c != '/' && c != '\x00')
 
 /--
@@ -30,7 +34,7 @@ Joins path segments into a root-relative path string, or `none` if any segment i
 was safe, and the result is exactly their `/`-intercalation, nothing more -- see the
 `joinSafeSegments_eq_some_iff` theorem in `Tests/File.lean` for the proof.
 -/
-def joinSafeSegments (segments : Array String) : Option String :=
+@[expose] def joinSafeSegments (segments : Array String) : Option String :=
   if segments.all isSafeSegment then
     some (String.intercalate "/" segments.toList)
   else
