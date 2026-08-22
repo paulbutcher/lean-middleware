@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.0] - 2026-08-22
+
+`Middleware.File.streamFile` is now total.
+
 ## [0.6.0] - 2026-08-20
 
 Switch to module system.
