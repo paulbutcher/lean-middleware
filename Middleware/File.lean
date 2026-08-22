@@ -60,22 +60,33 @@ def isContainedIn (root target : System.FilePath) : IO Bool := do
 
 /--
 Streams a file's contents in `chunkSize`-byte pieces without buffering the whole file in memory.
+`size` is the file's length as the caller measured it; a file that has grown since is truncated,
+at the first chunk boundary at or past `size`.
 
-The read-until-EOF loop has no structurally decreasing argument (termination depends on the
-file's length, not on any Lean value), so `partial` is unavoidable here -- the same situation
-`Std.Http.Body.Stream.readAll`/`forIn` are already in within the toolchain itself.
+`size` is also what bounds the read loop, and the bound is not arbitrary: every non-empty read
+returns at least one byte, so reading a file of the measured length takes at most `size`
+iterations. The `+ 1` leaves room for the read that observes EOF, which is what ends the loop in
+the ordinary case; the count only stops a file that has outgrown the size it was measured at.
 -/
-partial def streamFile (path : System.FilePath) (chunkSize : UInt64 := 65536) : Async Body.Stream :=
+def streamFile (path : System.FilePath) (size : Nat) (chunkSize : UInt64 := 65536) :
+    Async Body.Stream :=
   Body.stream fun s => do
     let handle ← IO.FS.Handle.mk path .read
-    let rec loop : Async Unit := do
-      let bytes ← handle.read chunkSize.toUSize
-      if bytes.isEmpty then
-        pure ()
-      else do
-        s.send (Chunk.ofByteArray bytes)
-        loop
-    loop
+    let rec loop (remaining : Nat) : Async Unit := do
+      match remaining with
+      | 0 => pure ()
+      | n + 1 =>
+        let bytes ← handle.read chunkSize.toUSize
+        if h : bytes.isEmpty then
+          pure ()
+        else do
+          s.send (Chunk.ofByteArray bytes)
+          loop (n + 1 - bytes.size)
+    termination_by remaining
+    decreasing_by
+      simp only [ByteArray.isEmpty, beq_iff_eq] at h
+      omega
+    loop (size + 1)
 
 /-- A weak ETag derived from a file's modification time and size (no content hash is available
 in this toolchain; this is the same fallback most static file servers use). -/
@@ -120,7 +131,7 @@ def file (root : System.FilePath) : Middleware :=
             let md ← path.metadata
             let etag := File.weakETagOf md
             let lastModified := File.lastModifiedOf md
-            let body ← File.streamFile path
+            let body ← File.streamFile path md.byteSize.toNat
             let headers :=
               Headers.empty
                 |>.insert (ETag.serialize etag).fst (ETag.serialize etag).snd

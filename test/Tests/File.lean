@@ -14,6 +14,7 @@ public section
 open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
+open Std.Async
 open Middleware (file notModified)
 
 namespace Tests.File
@@ -113,6 +114,38 @@ def composesWithNotModifiedTest : IO Unit :=
         assertContains response "hello world"
         assertContains response "Etag"
 
+/-- A fixture of `n` repetitions of a 10-byte line, long enough to span many chunks. -/
+def repeated (n : Nat) : String :=
+  String.join (List.replicate n "0123456789")
+
+def streamOf (path : System.FilePath) (size : Nat) (chunkSize : UInt64) : IO ByteArray :=
+  Async.block do
+    let stream ← Middleware.File.streamFile path size chunkSize
+    stream.readAll
+
+/-- Reassembly across chunk boundaries: the byte count the loop is bounded by must not stop it
+before the file's last byte, however many reads that takes. -/
+def streamsAcrossChunkBoundariesTest : IO Unit :=
+  withFixtureDir fun dir => do
+    let path := dir / "big.txt"
+    let contents := repeated 500
+    IO.FS.writeFile path contents
+    let md ← path.metadata
+    let streamed ← streamOf path md.byteSize.toNat 64
+    unless streamed == contents.toUTF8 do
+      throw <| IO.userError s!"streamed {streamed.size} bytes, expected {contents.toUTF8.size}"
+
+/-- The bound is what stops a file that has grown since it was measured, so such a file is served
+truncated rather than streamed for as long as it keeps growing. -/
+def growthBeyondMeasuredSizeIsTruncatedTest : IO Unit :=
+  withFixtureDir fun dir => do
+    let path := dir / "big.txt"
+    let contents := repeated 500
+    IO.FS.writeFile path contents
+    let streamed ← streamOf path 10 64
+    unless streamed.size < contents.toUTF8.size && contents.toUTF8.extract 0 streamed.size == streamed do
+      throw <| IO.userError s!"expected a truncated prefix, got {streamed.size} bytes"
+
 def run : IO Unit :=
   runGroup "Middleware.File" do
     servesExistingFileTest
@@ -121,5 +154,7 @@ def run : IO Unit :=
     traversalRejectedTest
     encodedTraversalRejectedTest
     composesWithNotModifiedTest
+    streamsAcrossChunkBoundariesTest
+    growthBeyondMeasuredSizeIsTruncatedTest
 
 end Tests.File
