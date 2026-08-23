@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0] - 2026-08-23
+
+`catchAll` now reports the errors it recovers from to the handler's `onFailure`
+
 ## [0.7.0] - 2026-08-22
 
 `Middleware.File.streamFile` is now total.
