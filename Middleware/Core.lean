@@ -57,7 +57,9 @@ convention:
   ship with none of them.
 - `catchAll` next, so it sees a failure from *any* layer below it and can turn it into a clean
   `500` instead of the connection tearing down. If it sat anywhere else, an exception thrown
-  above it would go uncaught.
+  above it would go uncaught. It reports what it catches to `onFailure`, so an application that
+  logs errors must attach that callback to the `base` handed to this function, not to the stack
+  this function returns (see `catchAll`).
 - `serverSpan` directly inside `catchAll`, so an exception from any layer below reaches its span
   first: the span records status `error` and the message the exception carried before `catchAll`
   turns it into a `500`. Outside `catchAll` the exception would already have become a response,

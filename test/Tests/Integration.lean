@@ -40,7 +40,7 @@ def extractCookieValue (response : ByteArray) (name : String) : Option String :=
 supplies its own base handler). -/
 def stackAround (store : MemoryStore) (handler : StatelessHandler) : StatelessHandler :=
   Middleware.apply
-    [catchAll (fun _ => pure ()), cookies, session store {}, flash, params,
+    [catchAll, cookies, session store {}, flash, params,
      contentType "application/octet-stream", notModified] handler
 
 def paramsAndSessionHandler : StatelessHandler :=
@@ -113,7 +113,7 @@ real `304`. -/
 def realFileConditionalGetIntegrationTest : IO Unit :=
   withFixtureDir fun dir => do
     let stack := Middleware.apply
-      [catchAll (fun _ => pure ()), contentType "application/octet-stream", notModified]
+      [catchAll, contentType "application/octet-stream", notModified]
       (file dir notFoundHandler)
     let capturedETag ← IO.mkRef (none : Option String)
     check "GET on a real file returns 200 with a real ETag" (mkGetClose "/hello.txt")
@@ -181,7 +181,7 @@ so a `500` still carries them -- confirmed against the real `catchAll` short-cir
 each middleware in isolation. -/
 def securityHeadersSurviveCatchAllTest : IO Unit :=
   check "hsts and X-Frame-Options still apply to a 500 produced by catchAll" (mkGetClose "/")
-    (Middleware.apply [hsts ({} : HstsOptions), xFrameOptions .sameOrigin, catchAll (fun _ => pure ())]
+    (Middleware.apply [hsts ({} : HstsOptions), xFrameOptions .sameOrigin, catchAll]
       throwingHandler).onRequest fun response => do
       assertStatus response "HTTP/1.1 500"
       assertContains response "Strict-Transport-Security"
