@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Proxy
+public import Middleware.HeaderValue
 
 public section
 
@@ -51,7 +52,7 @@ def sslRedirect (options : SslRedirectOptions := {}) : Middleware :=
                 Status.movedPermanently
               else
                 Status.temporaryRedirect
-            let headers := Headers.empty.insert Header.Name.location (Header.Value.ofString! location)
+            let headers := Headers.empty.insert Header.Name.location (Header.Value.ofStringSanitized location)
             pure {
               line := { status, version := req.line.version, headers },
               body := Body.Any.ofBody ({} : Body.Empty) } }
@@ -84,7 +85,7 @@ def absoluteRedirects : Middleware :=
                 let absolute :=
                   if loc.value.startsWith "/" then s!"{origin}{loc.value}" else s!"{origin}/{loc.value}"
                 let headers := (resp.line.headers.erase Header.Name.location).insert
-                  Header.Name.location (Header.Value.ofString! absolute)
+                  Header.Name.location (Header.Value.ofStringSanitized absolute)
                 pure { resp with line := { resp.line with headers } } }
 
 end Middleware

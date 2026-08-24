@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.HeaderValue
 public import Std.Time
 
 public section
@@ -78,10 +79,20 @@ structure SetCookie where
 
 namespace SetCookie
 
+/-- Drops anything RFC 6265's `cookie-name` (an RFC 9110 `token`) doesn't admit, so a name can't
+introduce a second `=` or an attribute of the application's own. -/
+private def sanitizeName (name : String) : String :=
+  String.ofList (name.toList.filter Std.Http.Internal.Char.tchar)
+
+/-- Drops what RFC 6265's attribute values exclude: control characters, and `;`, which would
+otherwise start a further attribute. -/
+private def sanitizeAttr (s : String) : String :=
+  String.ofList (s.toList.filter fun c => Std.Http.Internal.Char.fieldContent c && c != ';')
+
 private def renderAttrs (attrs : CookieAttrs) : String :=
   let parts : List (Option String) :=
-    [ attrs.domain.map (s!"; Domain={·}"),
-      attrs.path.map (s!"; Path={·}"),
+    [ attrs.domain.map (fun d => s!"; Domain={sanitizeAttr d}"),
+      attrs.path.map (fun p => s!"; Path={sanitizeAttr p}"),
       attrs.maxAge.map (s!"; Max-Age={·}"),
       attrs.expires.map (fun d => s!"; Expires={d.toRFC822String}"),
       if attrs.secure then some "; Secure" else none,
@@ -89,11 +100,12 @@ private def renderAttrs (attrs : CookieAttrs) : String :=
       attrs.sameSite.map (s!"; SameSite={·.toWire}") ]
   String.join (parts.filterMap (·))
 
-/-- Renders `name=value; Attr=val; ...`, percent-encoding `value` so it's always valid
-`cookie-octet` regardless of what characters the application put in it. -/
+/-- Renders `name=value; Attr=val; ...`. Total whatever characters the application put in the
+cookie: `value` is percent-encoded so it's always valid `cookie-octet`, and `name` and the
+attribute values are stripped of anything their own grammars exclude. -/
 def serialize (c : SetCookie) : Header.Name × Header.Value :=
-  let raw := s!"{c.name}={encodeCookieValue c.value}{renderAttrs c.attrs}"
-  (Middleware.Header.Name.setCookie, Header.Value.ofString! raw)
+  let raw := s!"{sanitizeName c.name}={encodeCookieValue c.value}{renderAttrs c.attrs}"
+  (Middleware.Header.Name.setCookie, Header.Value.ofStringSanitized raw)
 
 /-- Parses back the `name=value` pair a `Set-Cookie` header carries. Attributes are write-only
 in practice (nothing re-parses a response's own `Set-Cookie` for its attributes), so they're

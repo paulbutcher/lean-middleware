@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.HeaderValue
 
 public section
 
@@ -66,6 +67,6 @@ def contentType (default : String := "application/octet-stream") : Middleware :=
           let mime := ((ContentType.extensionOf req.line.uri.path).bind ContentType.lookup).getD default
           pure { resp with
             line := { resp.line with
-              headers := resp.line.headers.insert Header.Name.contentType (Header.Value.ofString! mime) } } }
+              headers := resp.line.headers.insert Header.Name.contentType (Header.Value.ofStringSanitized mime) } } }
 
 end Middleware

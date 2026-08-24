@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Tests.Core
+public import Tests.HeaderValue
 public import Tests.CatchAll
 public import Tests.ContentType
 public import Tests.Params

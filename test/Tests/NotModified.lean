@@ -7,6 +7,7 @@ module
 
 public import Middleware.NotModified
 public import Std.Http.Test.Helpers
+public import Plausible
 
 public section
 
@@ -33,6 +34,31 @@ theorem matchesTag_of_mem (ts : List ETag) (t e : ETag) (hm : t ∈ ts) (hv : t.
     IfNoneMatch.matchesTag (.tags ts) e = true := by
   simp only [IfNoneMatch.matchesTag, List.any_eq_true, ETag.weakMatches, beq_iff_eq]
   exact ⟨t, hm, hv⟩
+
+/-- Whatever an application puts in `ETag.value`, the rendered header is still a well-formed
+entity tag that parses back: a `"` of its own can't end the tag early, and a control character
+can't cost the response its `ETag` header altogether. -/
+def etagRoundtripHolds (value : String) (weak : Bool) : Bool :=
+  match ETag.parse (ETag.serialize { value, weak }).snd with
+  | some tag => tag.weak == weak && tag.value.toList.all Std.Http.Internal.Char.etagc
+  | none => false
+
+def etagRoundtripTest : IO Unit := do
+  match ← Plausible.Testable.checkIO
+      (Plausible.NamedBinder "value" <| ∀ value : String, etagRoundtripHolds value false = true) with
+  | .success _ => pure ()
+  | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries"
+  | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
+
+/-- The same property against values chosen to attack it, since `Plausible` is very unlikely to
+generate a tag containing a `"` or a control character on its own. -/
+def craftedETagsRoundtripTest : IO Unit := do
+  let values := ["", "abc123", "a\"b", "\"", "a\x0d\nETag: forged", "\x00", "  spaced  ", "W/\"x\""]
+  for value in values do
+    for weak in [false, true] do
+      unless etagRoundtripHolds value weak do
+        let wire := (ETag.serialize { value, weak }).snd
+        throw <| IO.userError s!"tag {value.quote} serialized unusably as: {wire.value.quote}"
 
 def resourceTimestamp : Std.Time.Timestamp :=
   .ofSecondsSinceUnixEpoch (.ofNat 1_000_000_000)
@@ -104,5 +130,7 @@ def run : IO Unit :=
     ifModifiedSinceEarlierTest
     ifModifiedSinceLaterTest
     ifNoneMatchPrecedenceTest
+    etagRoundtripTest
+    craftedETagsRoundtripTest
 
 end Tests.NotModified

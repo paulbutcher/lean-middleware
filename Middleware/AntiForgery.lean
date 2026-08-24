@@ -41,8 +41,7 @@ secret. -/
 private def constantTimeEq (a b : ByteArray) : Bool :=
   if a.size != b.size then false
   else
-    let diff := (List.range a.size).foldl (init := (0 : UInt8))
-      fun acc i => acc ||| (a.get! i ^^^ b.get! i)
+    let diff := (a.toList.zipWith (· ^^^ ·) b.toList).foldl (· ||| ·) 0
     diff == 0
 
 /-- Returns `403` with a plain HTML body; `AntiForgeryOptions.errorHandler`'s default. -/

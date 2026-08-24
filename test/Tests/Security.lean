@@ -47,6 +47,17 @@ def frameOptionsNoDuplicateTest : IO Unit :=
         throw <| IO.userError s!"expected exactly one X-Frame-Options header, found {occurrences}"
       assertContains response "X-Frame-Options: DENY"
 
+/-- A CRLF in an application-supplied value neither splits the response nor costs the header its
+value; the value is stripped of what it can't legally carry and sent anyway. -/
+def frameOptionsHeaderInjectionTest : IO Unit :=
+  check "a CRLF in allowFrom neither splits the response nor empties the header" (mkGetClose "/")
+    (xFrameOptions (.allowFrom "https://example.com\x0d\nX-Evil: 1") bareHandler).onRequest
+    fun response => do
+      assertStatus response "HTTP/1.1 200"
+      assertAbsent response "\x0d\nX-Evil:"
+      assertAbsent response "X-Frame-Options: \x0d\n"
+      assertContains response "X-Frame-Options: ALLOW-FROM https://example.com"
+
 def contentTypeOptionsTest : IO Unit :=
   check "always nosniff" (mkGetClose "/") (xContentTypeOptions bareHandler).onRequest
     fun response => assertContains response "X-Content-Type-Options: nosniff"
@@ -77,6 +88,7 @@ def run : IO Unit :=
     frameOptionsDenyTest
     frameOptionsAllowFromTest
     frameOptionsNoDuplicateTest
+    frameOptionsHeaderInjectionTest
     contentTypeOptionsTest
     xssProtectionDefaultTest
     xssProtectionDisabledTest

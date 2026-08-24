@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.HeaderValue
 
 public section
 
@@ -28,7 +29,7 @@ occurrence -- `Headers.insert` is additive (by design, for multi-value headers l
 `Set-Cookie`), and `Headers.replaceLast` is a no-op when the header is absent, so neither alone
 guarantees exactly one occurrence for a single-valued header. -/
 private def setHeader (headers : Headers) (name : Header.Name) (value : String) : Headers :=
-  (headers.erase name).insert name (Header.Value.ofString! value)
+  (headers.erase name).insert name (Header.Value.ofStringSanitized value)
 
 /-- `X-Frame-Options` (governs whether the page can be framed, a defense against clickjacking).
 Browser support for `allowFrom` is incomplete. -/

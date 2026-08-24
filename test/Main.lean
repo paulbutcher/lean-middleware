@@ -11,6 +11,7 @@ public section
 
 def main : IO Unit := do
   Tests.Core.run
+  Tests.HeaderValue.run
   Tests.CatchAll.run
   Tests.ContentType.run
   Tests.Params.run

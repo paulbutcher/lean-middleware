@@ -31,12 +31,12 @@ def serialize (data : Session) : ByteArray :=
     let acc := pushU32BE acc vBytes.size.toUInt32
     acc ++ vBytes
 
-private def readU32BE (arr : ByteArray) (off : Nat) : Option UInt32 :=
-  if off + 4 ≤ arr.size then
-    some
-      ((arr.get! off).toUInt32 <<< 24 ||| (arr.get! (off + 1)).toUInt32 <<< 16 |||
-        (arr.get! (off + 2)).toUInt32 <<< 8 ||| (arr.get! (off + 3)).toUInt32)
-  else none
+private def readU32BE (arr : ByteArray) (off : Nat) : Option UInt32 := do
+  let b0 ← arr[off]?
+  let b1 ← arr[off + 1]?
+  let b2 ← arr[off + 2]?
+  let b3 ← arr[off + 3]?
+  return b0.toUInt32 <<< 24 ||| b1.toUInt32 <<< 16 ||| b2.toUInt32 <<< 8 ||| b3.toUInt32
 
 private def readString (arr : ByteArray) (off : Nat) : Option (String × Nat) := do
   let len ← readU32BE arr off

@@ -110,6 +110,23 @@ def craftedValuesCannotInjectAttributesTest : IO Unit := do
       let wire := (SetCookie.serialize { name := "x", value }).snd
       throw <| IO.userError s!"value {value.quote} serialized unsafely as: {wire.value.quote}"
 
+/-- A control character in the `name` or in an attribute still yields a `Set-Cookie` that carries
+the cookie, rather than an empty header, and still can't smuggle in an attribute of its own. -/
+def controlCharactersStillSerializeTest : IO Unit := do
+  let cookie : SetCookie :=
+    { name := "sid\x0d\nX-Evil: 1", value := "abc",
+      attrs := { path := some "/app\x0d\n; HttpOnly" } }
+  let wire := (SetCookie.serialize cookie).snd
+  unless (wire.value.splitOn ";").length == 2 do
+    throw <| IO.userError s!"expected exactly one attribute in: {wire.value.quote}"
+  match SetCookie.parse wire with
+  | none => throw <| IO.userError s!"didn't parse back: {wire.value.quote}"
+  | some sc => do
+    unless sc.value == "abc" do
+      throw <| IO.userError s!"cookie value came back as {sc.value.quote}"
+    unless !sc.name.isEmpty && sc.name.toList.all Std.Http.Internal.Char.tchar do
+      throw <| IO.userError s!"cookie name came back as {sc.name.quote}"
+
 def run : IO Unit :=
   runGroup "Middleware.Cookies" do
     parsesCookieHeaderTest
@@ -119,5 +136,6 @@ def run : IO Unit :=
     attrsRenderedTest
     cookieValueRoundtripTest
     craftedValuesCannotInjectAttributesTest
+    controlCharactersStillSerializeTest
 
 end Tests.Cookies

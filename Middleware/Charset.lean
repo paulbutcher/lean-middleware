@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.HeaderValue
 
 public section
 
@@ -41,7 +42,7 @@ def defaultCharset (charset : String := "utf-8") : Middleware :=
         | none => pure resp
         | some v =>
           if Charset.isTextBased v.value && !Charset.hasCharset v.value then
-            let newValue := Header.Value.ofString! s!"{v.value}; charset={charset}"
+            let newValue := Header.Value.ofStringSanitized s!"{v.value}; charset={charset}"
             let headers := (resp.line.headers.erase Header.Name.contentType).insert
               Header.Name.contentType newValue
             pure { resp with line := { resp.line with headers } }

@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.HeaderValue
 public import Std.Time
 
 public section
@@ -32,9 +33,7 @@ deriving BEq, Repr
 
 namespace ETag
 
-/-- Parses `"..."` or `W/"..."`, validating the inner characters against `etagc`. -/
-def parse (v : Header.Value) : Option ETag :=
-  let s := v.value
+private def parseWire (s : String) : Option ETag :=
   let (weak, rest) : Bool × String :=
     if s.startsWith "W/" then (true, (s.drop 2).toString) else (false, s)
   match rest.toList with
@@ -49,9 +48,16 @@ def parse (v : Header.Value) : Option ETag :=
     | _ => none
   | _ => none
 
+/-- Parses `"..."` or `W/"..."`, validating the inner characters against `etagc`. -/
+def parse (v : Header.Value) : Option ETag :=
+  parseWire v.value
+
+/-- Renders `"..."` or `W/"..."`, dropping from `value` anything `etagc` doesn't admit --
+notably `"` itself -- so an application-built tag can't escape its own quotes. -/
 def serialize (e : ETag) : Header.Name × Header.Value :=
-  let raw := (if e.weak then "W/\"" else "\"") ++ e.value ++ "\""
-  (Middleware.Header.Name.etag, Header.Value.ofString! raw)
+  let inner := String.ofList (e.value.toList.filter Std.Http.Internal.Char.etagc)
+  let raw := (if e.weak then "W/\"" else "\"") ++ inner ++ "\""
+  (Middleware.Header.Name.etag, Header.Value.ofStringSanitized raw)
 
 instance : Header ETag := ⟨parse, serialize⟩
 
@@ -73,7 +79,7 @@ def parse (v : Header.Value) : Option LastModified :=
   | .error _ => none
 
 def serialize (lm : LastModified) : Header.Name × Header.Value :=
-  (Middleware.Header.Name.lastModified, Header.Value.ofString! lm.date.toRFC822String)
+  (Middleware.Header.Name.lastModified, Header.Value.ofStringSanitized lm.date.toRFC822String)
 
 instance : Header LastModified := ⟨parse, serialize⟩
 
@@ -92,7 +98,7 @@ def parse (v : Header.Value) : Option IfModifiedSince :=
   | .error _ => none
 
 def serialize (i : IfModifiedSince) : Header.Name × Header.Value :=
-  (Middleware.Header.Name.ifModifiedSince, Header.Value.ofString! i.date.toRFC822String)
+  (Middleware.Header.Name.ifModifiedSince, Header.Value.ofStringSanitized i.date.toRFC822String)
 
 instance : Header IfModifiedSince := ⟨parse, serialize⟩
 
@@ -111,15 +117,16 @@ def parse (v : Header.Value) : Option IfNoneMatch :=
     some .any
   else
     let tags := (s.splitOn ",").filterMap fun part =>
-      ETag.parse (Header.Value.ofString! part.trimAscii.toString)
+      ETag.parseWire part.trimAscii.toString
     if tags.isEmpty then none else some (.tags tags)
 
 def serialize (i : IfNoneMatch) : Header.Name × Header.Value :=
   match i with
-  | .any => (Middleware.Header.Name.ifNoneMatch, Header.Value.ofString! "*")
+  | .any => (Middleware.Header.Name.ifNoneMatch, Header.Value.ofStringSanitized "*")
   | .tags ts =>
     let rendered := ts.map (fun t => (ETag.serialize t).snd.value)
-    (Middleware.Header.Name.ifNoneMatch, Header.Value.ofString! (String.intercalate ", " rendered))
+    (Middleware.Header.Name.ifNoneMatch,
+      Header.Value.ofStringSanitized (String.intercalate ", " rendered))
 
 instance : Header IfNoneMatch := ⟨parse, serialize⟩
 

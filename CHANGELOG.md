@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.0] - 2026-08-24
+
+Fix a number of issues where invalid characters could find their way into headers and cookies.
+
 ## [0.8.0] - 2026-08-23
 
 `catchAll` now reports the errors it recovers from to the handler's `onFailure`
