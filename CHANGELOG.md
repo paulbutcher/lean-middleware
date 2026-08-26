@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+`Params.get` now looks a parameter up by its decoded name.
+
 ## [0.9.0] - 2026-08-24
 
 Fix a number of issues where invalid characters could find their way into headers and cookies.

@@ -22,9 +22,27 @@ deriving TypeName
 
 namespace Params
 
-/-- Looks up a parameter by key. Form-body values take precedence over query-string values. -/
+private def lookup (query : URI.Query) (key : String) : Option String :=
+  (query.toArray.find? fun (name, _) => name.decode == some key).bind fun (_, value) =>
+    match value with
+    | none => some ""
+    | some encoded => encoded.decode
+
+/--
+Looks up a parameter by its decoded name. Percent-encoding is not canonical, so a name can arrive
+spelled differently from the way it was written: browsers encode form field names far more
+aggressively than RFC 3986 requires, posting `a:b` as `a%3Ab`. Every spelling that decodes to
+`key` is therefore the same parameter, and a name whose bytes are not valid UTF-8 matches nothing.
+
+Form-body values take precedence over query-string values. A name present with no value reads as
+`some ""`, which callers can distinguish from the `none` of an absent name.
+
+This does mean `a b`, `a+b` and `a%20b` are one name. Callers that need to tell two encoded
+spellings apart have `Params.query` and `Params.form`, and can work on `URI.EncodedQueryParam`
+directly.
+-/
 def get (p : Params) (key : String) : Option String :=
-  (p.form.get key).orElse (fun _ => p.query.get key)
+  (lookup p.form key).orElse (fun _ => lookup p.query key)
 
 end Params
 
