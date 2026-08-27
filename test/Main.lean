@@ -26,6 +26,7 @@ def main : IO Unit := do
   Tests.Proxy.run
   Tests.Redirects.run
   Tests.AntiForgery.run
+  Tests.Extensions.run
   Tests.Tracing.run
   Tests.Crypto.AesGcm.run
   Tests.Crypto.Base64.run

@@ -112,6 +112,34 @@ outermost-first.
   synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on
   any non-safe request. Requires `session` wrapped outer.
 
+### Requiring an extension
+
+A handler reading `(req.extensions.get Params).bind (·.get "title")` gets `none` both when the
+form was empty and when `params` was never in the stack. The second is a misconfigured server,
+and it goes unreported.
+
+`withParams` (`Middleware/Extensions.lean`) hands the parameters to the handler instead, and
+refuses the request with a `500` when nothing established them:
+
+```lean
+def create : StatelessHandler :=
+  { onRequest := withParams fun ps _ =>
+      match ps.get "title" with
+      | some title => Response.ok.text title
+      | none => Response.badRequest.text "title is required" }
+```
+
+`withSession`, `withToken`, `withFlash` and `withCookies` do the same for the other extensions
+their middleware insert unconditionally, and `requiring` is the general form they are all
+specialisations of. `MultipartParams`, `ForwardedFor` and `Scheme` are inserted only when the
+request warrants one, so absence there says nothing about the stack and they get no helper.
+
+Pass `missing` to answer with something other than the default `500`:
+`withParams (missing := myErrorPage) fun ps req => ...`.
+
+These are handler combinators, not middleware; they wrap the innermost handler rather than
+appearing in `apply`'s list.
+
 ## Tracing
 
 `serverSpan` opens an OpenTelemetry `server` span around every request and publishes its
