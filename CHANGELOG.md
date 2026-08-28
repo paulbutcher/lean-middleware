@@ -1,8 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] - 2026-08-28
 
-`Params.get` now looks a parameter up by its decoded name.
+- Allow middlewares to be required.
+- `Params.get` now looks a parameter up by its decoded name.
 
 ## [0.9.0] - 2026-08-24
 
