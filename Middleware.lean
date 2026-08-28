@@ -23,3 +23,9 @@ public import Middleware.Redirects
 public import Middleware.AntiForgery
 public import Middleware.Extensions
 public import Middleware.Crypto.Base64
+
+/-
+`Middleware.Test.Browser` is deliberately absent from this list: it imports
+`Std.Http.Test.Helpers`, and an application that doesn't test through it shouldn't pull that into
+its build. Importing it is opt-in, from the test suite that wants it.
+-/

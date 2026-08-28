@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.0] - 2026-08-28
+
+`Middleware.Test.Browser`.
+
 ## [0.10.0] - 2026-08-28
 
 - Allow middlewares to be required.

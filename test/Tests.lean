@@ -21,6 +21,7 @@ public import Tests.Charset
 public import Tests.Proxy
 public import Tests.Redirects
 public import Tests.AntiForgery
+public import Tests.Browser
 public import Tests.Extensions
 public import Tests.Tracing
 public import Tests.Crypto.AesGcm

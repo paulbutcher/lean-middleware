@@ -159,6 +159,41 @@ string can carry credentials, `url.query`. Its `skip` predicate drops a request 
 altogether, which is worth pointing at static assets to avoid every asset `file` serves
 becoming its own export.
 
+## Testing
+
+`Middleware.Test.Browser` (`Middleware/Test/Browser.lean`) drives a stack across several
+requests the way a browser does, carrying a cookie jar between them:
+
+```lean
+open Middleware.Test
+
+def signUpThenSeeGreeting : IO Unit := do
+  let browser ← Browser.new (app store).onRequest
+  let _ ← browser.post "/sign-up" [("email", "a@example.com")] .omitted
+  assertContains (← browser.get "/") "Welcome back"
+```
+
+`get` sends the jar's cookies and harvests every `Set-Cookie` back into it, so a session, a
+flash message, or a login stays in force from one request to the next. `post` form-encodes its
+fields and sends the jar too.
+
+A stack containing `antiForgery` needs one thing more, since it refuses any post not carrying a
+token from the session. `get` also scrapes the token out of the page it fetched, and `post`
+sends it, as a form field or (with `.header`) as `X-CSRF-Token`:
+
+```lean
+  let _ ← browser.get "/articles/new"
+  let response ← browser.post "/articles" [("title", "Hello")]
+```
+
+A page that stops rendering its token fails the test, which is the point of scraping it rather
+than reading it from the session store. `post` throws rather than sending no token at all, so a
+`403` can never be misread as a pass; `.omitted`, above, is how a stack with no `antiForgery`
+says it has none to send.
+
+It is not imported by `Middleware`, since it pulls in `Std.Http.Test.Helpers`. Import
+`Middleware.Test.Browser` from the test suite that wants it.
+
 ## Packages
 
 - **`middleware`**: everything apart from `CookieStore` and `serverSpan`. Depends on nothing
@@ -191,3 +226,6 @@ require «middleware-tracing» from git "https://github.com/..." @ "main" / "tra
   dropped without changing what the rest of it means.
 - **ETag comparison** (`test/Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
   and a tag listed anywhere in `If-None-Match` matches (RFC 9110 §8.8.3.2).
+- **Token scraping** (`test/Tests/Browser.lean`): `Test.tokenAfter` returns exactly the quoted
+  string following the first occurrence of its marker, so a `Browser` posts back the token the
+  page really rendered rather than a truncated or overrun reading of it.
