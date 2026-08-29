@@ -14,7 +14,7 @@ open Std.Http.Server
 open Std.Http.Internal.Test
 open Middleware (cookies session params MemoryStore antiForgery AntiForgeryToken
   AntiForgeryOptions Params SessionData SessionUpdate SetCookie SetCookies Session)
-open Middleware.Test (Browser tokenAfter afterMarker upToQuote)
+open Middleware.Test (Browser tokenAfter tokenBetween afterMarker upTo)
 
 namespace Tests.Browser
 
@@ -80,6 +80,30 @@ def postWithoutTokenThrowsTest : IO Unit :=
     unless threw do
       throw <| IO.userError "expected a POST with no token held to throw"
 
+/-- Carries the token the way an HTMX application does, in an `hx-headers` attribute, where it
+is quoted with an escaped `&quot;` rather than a raw `"`. -/
+def hxHeadersHandler : StatelessHandler :=
+  { onRequest := fun req => do
+      if req.line.method == .post then
+        let title := ((req.extensions.get Params).bind (·.get "title")).getD "<none>"
+        Response.ok |>.text s!"posted:{title}"
+      else
+        let token := ((req.extensions.get AntiForgeryToken).map (·.value)).getD ""
+        Response.ok |>.html
+          ("<body hx-headers=\"{&quot;X-CSRF-Token&quot;: &quot;" ++ token
+            ++ "&quot;}\"></body>") }
+
+def escapedAttributeTokenTest : IO Unit :=
+  runGroup "a token quoted inside an escaped attribute is scraped whole" do
+    let store ← MemoryStore.new
+    let browser ← Browser.new
+      (Middleware.apply [cookies, session store {}, params, antiForgery {}]
+        hxHeadersHandler).onRequest
+      (tokenFrom := tokenBetween "X-CSRF-Token&quot;: &quot;" "&quot;")
+    let _ ← browser.get "/"
+    let response ← browser.post "/submit" [("title", "hello")] .header
+    assertContains response "posted:hello"
+
 def postWithoutAntiForgeryTest : IO Unit :=
   runGroup "a stack with no antiForgery is posted to with .omitted, no page fetched first" do
     let store ← MemoryStore.new
@@ -131,11 +155,24 @@ private theorem afterMarker_append (marker rest : List Char) :
   | nil => cases rest <;> simp [afterMarker]
   | cons m ms => simp [afterMarker, List.isPrefixOf]
 
-private theorem upToQuote_append (value rest : List Char) (h : '"' ∉ value) :
-    upToQuote (value ++ '"' :: rest) = some value := by
+private theorem upTo_append (terminator value rest : List Char)
+    (h : ∀ s, s <:+ value → s ≠ [] → ¬ terminator <+: (s ++ (terminator ++ rest))) :
+    upTo terminator (value ++ (terminator ++ rest)) = some value := by
   induction value with
-  | nil => simp [upToQuote]
-  | cons c cs ih => simp_all [upToQuote, Ne.symm]
+  | nil => cases terminator <;> cases rest <;> simp [upTo, List.isPrefixOf]
+  | cons c cs ih =>
+    have hno : ¬ terminator <+: c :: (cs ++ (terminator ++ rest)) := by
+      simpa using h (c :: cs) (List.suffix_refl _) (by simp)
+    rw [List.cons_append]
+    simp only [upTo, List.isPrefixOf_iff_prefix, hno, if_false]
+    rw [ih fun s hs hne => h s (hs.trans (List.suffix_cons c cs)) hne]
+    simp
+
+private theorem upTo_singleton (t : Char) (value rest : List Char) (h : t ∉ value) :
+    upTo [t] (value ++ (t :: rest)) = some value := by
+  induction value with
+  | nil => simp [upTo, List.isPrefixOf]
+  | cons c cs ih => simp_all [upTo, List.isPrefixOf, Ne.symm]
 
 private theorem afterMarker_of_no_earlier_match (marker pre rest : List Char)
     (h : ∀ s, s <:+ pre → s ≠ [] → ¬ marker <+: (s ++ rest)) :
@@ -149,29 +186,49 @@ private theorem afterMarker_of_no_earlier_match (marker pre rest : List Char)
     simp only [afterMarker, List.isPrefixOf_iff_prefix, hne, if_false]
     exact ih fun s hs hne' => h s (hs.trans (List.suffix_cons c cs)) hne'
 
-/-- `tokenAfter` reads back exactly what was rendered: on a page whose first occurrence of
-`marker` (`hearlier`: nothing before it starts one) is followed by a quote-free `value` and then
-a closing quote, it yields `value` and nothing else, whatever else the page contains. A token
-misread here becomes a post the application refuses, with nothing about the refusal pointing
-back at the scraper. -/
+/-- `tokenBetween` reads back exactly what was rendered: on a page whose first occurrence of
+`marker` (`hearlier`: nothing before it starts one) is followed by a `value` the `terminator`
+doesn't occur in (`hvalue`) and then the `terminator`, it yields `value` and nothing else,
+whatever else the page contains. A token misread here becomes a post the application refuses,
+with nothing about the refusal pointing back at the scraper. -/
+theorem tokenBetween_of_rendered (marker terminator pre value rest : String)
+    (hearlier : ∀ s, s <:+ pre.toList → s ≠ [] →
+      ¬ marker.toList <+: (s ++ (marker ++ value ++ terminator ++ rest).toList))
+    (hvalue : ∀ s, s <:+ value.toList → s ≠ [] →
+      ¬ terminator.toList <+: (s ++ (terminator.toList ++ rest.toList))) :
+    tokenBetween marker terminator (pre ++ (marker ++ value ++ terminator ++ rest))
+      = some value := by
+  have hafter : afterMarker marker.toList (pre ++ (marker ++ value ++ terminator ++ rest)).toList
+      = some (value.toList ++ (terminator.toList ++ rest.toList)) := by
+    rw [String.toList_append, afterMarker_of_no_earlier_match _ _ _ hearlier]
+    simpa [String.toList_append, List.append_assoc] using
+      afterMarker_append marker.toList (value.toList ++ (terminator.toList ++ rest.toList))
+  simp only [tokenBetween, hafter, Option.bind_some,
+    upTo_append terminator.toList value.toList rest.toList hvalue,
+    Option.map_some, String.ofList_toList]
+
+/-- The hidden-field case, where the terminator is a single `"` and `hvalue` is just "the value
+carries no quote". -/
 theorem tokenAfter_of_rendered (marker pre value rest : String)
     (hearlier : ∀ s, s <:+ pre.toList → s ≠ [] →
       ¬ marker.toList <+: (s ++ (marker ++ value ++ "\"" ++ rest).toList))
     (hquote : '"' ∉ value.toList) :
     tokenAfter marker (pre ++ (marker ++ value ++ "\"" ++ rest)) = some value := by
+  have hquoteList : "\"".toList = ['"'] := rfl
   have hafter : afterMarker marker.toList (pre ++ (marker ++ value ++ "\"" ++ rest)).toList
-      = some (value.toList ++ '"' :: rest.toList) := by
+      = some (value.toList ++ ('"' :: rest.toList)) := by
     rw [String.toList_append, afterMarker_of_no_earlier_match _ _ _ hearlier]
     simpa [String.toList_append, List.append_assoc] using
-      afterMarker_append marker.toList (value.toList ++ '"' :: rest.toList)
-  simp only [tokenAfter, hafter, Option.bind_some,
-    upToQuote_append value.toList rest.toList hquote, Option.map_some, String.ofList_toList]
+      afterMarker_append marker.toList (value.toList ++ ('"' :: rest.toList))
+  simp only [tokenAfter, tokenBetween, hafter, hquoteList, Option.bind_some,
+    upTo_singleton '"' value.toList rest.toList hquote, Option.map_some, String.ofList_toList]
 
 def run : IO Unit :=
   runGroup "Middleware.Test.Browser" do
     formRoundTripTest
     handBuiltPostRefusedTest
     headerPlacementTest
+    escapedAttributeTokenTest
     encodedFieldValueTest
     postWithoutTokenThrowsTest
     postWithoutAntiForgeryTest

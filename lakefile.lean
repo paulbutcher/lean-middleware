@@ -8,7 +8,7 @@ import Lake
 open Lake DSL
 
 package middleware where
-  version := v!"0.11.0"
+  version := v!"0.12.0"
 
 @[default_target]
 lean_lib Middleware

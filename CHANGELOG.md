@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.12.0] - 2026-08-29
+
+`Test.tokenBetween` takes a terminator, so a token delimited by an escaped `&quot;` scrapes correctly.
+
 ## [0.11.0] - 2026-08-28
 
 `Middleware.Test.Browser`.

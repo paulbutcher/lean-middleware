@@ -35,6 +35,11 @@ Project-specific guidance for Claude Code when working in this repo.
 - Never use an emdash (—). Wherever you might use one, use either a comma or a
   semicolon instead.
   
+## Changelog
+
+- One short sentence per release, as the existing entries are. Several unrelated changes become
+  several bullets, not a longer sentence.
+
 ## Environment
 
 - Installing OS packages should be done by infrastructure external to this project so

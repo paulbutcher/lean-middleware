@@ -35,16 +35,31 @@ inductive TokenPlacement where
     if marker.isPrefixOf (c :: cs) then some ((c :: cs).drop marker.length)
     else afterMarker marker cs
 
-/-- What precedes the first `"`, or `none` if nothing does. -/
-@[expose] def upToQuote : List Char → Option (List Char)
-  | [] => none
-  | c :: cs => if c == '"' then some [] else (upToQuote cs).map (c :: ·)
+/-- What precedes the first occurrence of `terminator`, or `none` if there isn't one. -/
+@[expose] def upTo (terminator : List Char) : List Char → Option (List Char)
+  | [] => if terminator.isEmpty then some [] else none
+  | c :: cs =>
+    if terminator.isPrefixOf (c :: cs) then some []
+    else (upTo terminator cs).map (c :: ·)
 
-/-- The quoted string following `marker`, which is the shape both a hidden field and an
-attribute carrying a token have. `none` if `marker` doesn't occur, or if nothing closes the
-quote after it. -/
+/-- The text between the first occurrence of `marker` and the next `terminator`. `none` if
+`marker` doesn't occur, or if no `terminator` follows it.
+
+What opens and what closes the token are both the caller's, because they differ: a hidden field
+quotes it with `"`, an HTML attribute carrying it quotes it with an escaped `&quot;`. -/
+@[expose] def tokenBetween (marker terminator body : String) : Option String :=
+  ((afterMarker marker.toList body.toList).bind (upTo terminator.toList)).map String.ofList
+
+/-- The `"`-quoted string following `marker`, which is the shape a hidden form field has.
+
+Not the shape of a token carried inside an HTML *attribute*: an attribute's value is escaped, so
+a quote within it is written `&quot;`, and this runs straight past it to the attribute's own
+closing quote. That returns a token that is wrong rather than absent, which the application then
+refuses with nothing about the refusal pointing back here. Scrape one of those with
+`tokenBetween marker "&quot;"`; the standard HTMX idiom, `hx-headers` carrying
+`{"X-CSRF-Token": "..."}`, wants `tokenBetween "X-CSRF-Token&quot;: &quot;" "&quot;"`. -/
 @[expose] def tokenAfter (marker : String) (body : String) : Option String :=
-  ((afterMarker marker.toList body.toList).bind upToQuote).map String.ofList
+  tokenBetween marker "\"" body
 
 /--
 A cookie jar and a held anti-forgery token, driving a middleware stack the way a browser drives
@@ -71,6 +86,10 @@ structure Browser where
 /--
 `paramName` is a constructor argument rather than a field default so that `tokenFrom`'s default
 can be written in terms of it.
+
+An application whose pages carry the token somewhere other than a hidden field passes its own
+`tokenFrom`; `tokenAfter` and `tokenBetween` are exported so that doing so is one line rather
+than a scraper.
 
 Reading the token from the session store instead of from the page would be steadier and would
 defeat the point: a page that stopped rendering its token would still pass every test built on

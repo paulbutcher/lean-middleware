@@ -191,6 +191,16 @@ than reading it from the session store. `post` throws rather than sending no tok
 `403` can never be misread as a pass; `.omitted`, above, is how a stack with no `antiForgery`
 says it has none to send.
 
+The default scrapes the hidden field, `name="..." value="..."`. A page carrying its token in an
+HTML attribute instead needs its own `tokenFrom`, because an attribute's value is escaped and
+the token inside it is delimited by `&quot;` rather than by `"`. `tokenBetween` takes both ends,
+so the HTMX idiom, `hx-headers` carrying `{"X-CSRF-Token": "..."}`, is one line:
+
+```lean
+  let browser ← Browser.new (app store).onRequest
+    (tokenFrom := tokenBetween "X-CSRF-Token&quot;: &quot;" "&quot;")
+```
+
 It is not imported by `Middleware`, since it pulls in `Std.Http.Test.Helpers`. Import
 `Middleware.Test.Browser` from the test suite that wants it.
 
@@ -226,6 +236,6 @@ require «middleware-tracing» from git "https://github.com/..." @ "main" / "tra
   dropped without changing what the rest of it means.
 - **ETag comparison** (`test/Tests/NotModified.lean`): weak comparison turns only on the opaque tag,
   and a tag listed anywhere in `If-None-Match` matches (RFC 9110 §8.8.3.2).
-- **Token scraping** (`test/Tests/Browser.lean`): `Test.tokenAfter` returns exactly the quoted
-  string following the first occurrence of its marker, so a `Browser` posts back the token the
-  page really rendered rather than a truncated or overrun reading of it.
+- **Token scraping** (`test/Tests/Browser.lean`): `Test.tokenBetween` returns exactly the text
+  between the first occurrence of its marker and the next terminator, so a `Browser` posts back
+  the token the page really rendered rather than a truncated or overrun reading of it.
