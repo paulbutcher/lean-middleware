@@ -69,17 +69,6 @@ def encodedFieldValueTest : IO Unit :=
     let response ← browser.post "/submit" [("title", "a+b & c=d")]
     assertContains response "posted:a+b & c=d"
 
-def postWithoutTokenThrowsTest : IO Unit :=
-  runGroup "a POST with no token held throws rather than returning a 403" do
-    let store ← MemoryStore.new
-    let browser ← Browser.new (app store).onRequest
-    let threw ← try
-        let _ ← browser.post "/submit" []
-        pure false
-      catch _ => pure true
-    unless threw do
-      throw <| IO.userError "expected a POST with no token held to throw"
-
 /-- Carries the token the way an HTMX application does, in an `hx-headers` attribute, where it
 is quoted with an escaped `&quot;` rather than a raw `"`. -/
 def hxHeadersHandler : StatelessHandler :=
@@ -103,6 +92,33 @@ def escapedAttributeTokenTest : IO Unit :=
     let _ ← browser.get "/"
     let response ← browser.post "/submit" [("title", "hello")] .header
     assertContains response "posted:hello"
+
+private def postError (browser : Browser) : IO (Option String) := do
+  try
+    let _ ← browser.post "/submit" []
+    pure none
+  catch e => pure (some (toString e))
+
+def postWithoutTokenThrowsTest : IO Unit :=
+  runGroup "a POST with no token held throws, naming which mistake left it with none" do
+    let store ← MemoryStore.new
+    let unfetched ← Browser.new (app store).onRequest
+    match ← postError unfetched with
+    | none => throw <| IO.userError "expected a POST with no token held to throw"
+    | some message =>
+      unless message.contains "nothing has been fetched" do
+        throw <| IO.userError s!"expected the message to blame the missing fetch: {message}"
+    -- The default `tokenFrom` against a page that quotes its token with `&quot;`: fetched, and
+    -- unreadable where it looked, which is the other mistake entirely.
+    let unreadable ← Browser.new
+      (Middleware.apply [cookies, session store {}, params, antiForgery {}]
+        hxHeadersHandler).onRequest
+    let _ ← unreadable.get "/"
+    match ← postError unreadable with
+    | none => throw <| IO.userError "expected a POST with an unreadable token to throw"
+    | some message =>
+      unless message.contains "tokenBetween" do
+        throw <| IO.userError s!"expected the message to blame `tokenFrom`: {message}"
 
 def postWithoutAntiForgeryTest : IO Unit :=
   runGroup "a stack with no antiForgery is posted to with .omitted, no page fetched first" do

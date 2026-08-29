@@ -82,6 +82,10 @@ structure Browser where
   /-- Name to raw wire value, as a browser stores them, so they go back out verbatim. -/
   cookies : IO.Ref (List (String × String))
   token : IO.Ref (Option String)
+  /-- Whether any response has come back yet. Only tells "nothing has been fetched" from "what
+  was fetched yielded no token" when `post` finds none to send, which are the same silence but
+  different mistakes. -/
+  fetched : IO.Ref Bool
 
 /--
 `paramName` is a constructor argument rather than a field default so that `tokenFrom`'s default
@@ -99,7 +103,8 @@ def Browser.new (handler : TestHandler)
     (paramName : String := ({} : AntiForgeryOptions).paramName)
     (tokenFrom : String → Option String := tokenAfter s!"name=\"{paramName}\" value=\"") :
     IO Browser :=
-  return { handler, paramName, tokenFrom, cookies := ← IO.mkRef [], token := ← IO.mkRef none }
+  return { handler, paramName, tokenFrom, cookies := ← IO.mkRef [],
+           token := ← IO.mkRef none, fetched := ← IO.mkRef false }
 
 private def headerBodyBoundary : ByteArray := "\x0d\n\x0d\n".toUTF8
 
@@ -138,6 +143,7 @@ private def applySetCookie (jar : List (String × String)) (raw : String) :
 private def Browser.harvest (browser : Browser) (response : ByteArray) : IO Unit := do
   let some (headers, body) := splitResponse response
     | throw <| IO.userError "response carries no header/body boundary"
+  browser.fetched.set true
   browser.cookies.modify fun jar =>
     (headers.filterMap setCookieValue).foldl applySetCookie jar
   -- A response yielding no token leaves the held one alone: a fragment legitimately carries
@@ -170,12 +176,22 @@ private def formEncode (s : String) : String :=
   toString (URI.EncodedString.encode (r := Std.Http.Internal.Char.isQueryDataChar) s)
     |>.replace "+" "%2B"
 
+/-- The held token, or a throw naming which mistake left there being none. The two are the same
+silence and different fixes, so guessing between them in the message sends the reader looking in
+the wrong place, which is what the throw exists to prevent. -/
 private def Browser.heldToken (browser : Browser) (path : String) : IO String := do
-  let some token ← browser.token.get
-    | throw <| IO.userError s!"no anti-forgery token held, so POST {path} is not a request a \
-        browser could make: fetch a page that renders one first, or pass `.omitted` if this \
-        stack has no `antiForgery` in it"
-  pure token
+  if let some token ← browser.token.get then
+    return token
+  let cause :=
+    if ← browser.fetched.get then
+      "every response so far has been read for one and none carried it where `tokenFrom` looks: \
+       the page may not render the token at all, may render it under a name other than \
+       `paramName`, or may quote it with an escaped `&quot;` rather than a raw `\"`, which wants \
+       `tokenBetween` rather than the default"
+    else
+      "nothing has been fetched yet, so nothing has had the chance to render one"
+  throw <| IO.userError s!"no anti-forgery token held, so POST {path} is not a request a \
+    browser could make: {cause}. Pass `.omitted` if this stack has no `antiForgery` in it."
 
 /-- Fetches `path`, sending the jar's cookies and harvesting whatever the response sets, along
 with a token if the body carries one. Returns the raw response, so `assertStatus` and the rest

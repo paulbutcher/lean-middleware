@@ -2,7 +2,8 @@
 
 ## [0.12.0] - 2026-08-29
 
-`Test.tokenBetween` takes a terminator, so a token delimited by an escaped `&quot;` scrapes correctly.
+- `Test.tokenBetween` takes a terminator, so a token delimited by an escaped `&quot;` scrapes correctly.
+- `Browser.post` names which mistake left it with no token to send.
 
 ## [0.11.0] - 2026-08-28
 
