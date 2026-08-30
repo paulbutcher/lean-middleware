@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.0] - 2026-08-30
+
+- `session` and `flash` refuse a stack missing the layer they require, naming it, rather than reading its absence as a request that carried no cookie and no message.
+- Every theorem now carries a doc comment.
+
 ## [0.12.0] - 2026-08-29
 
 - `Test.tokenBetween` takes a terminator, so a token delimited by an escaped `&quot;` scrapes correctly.

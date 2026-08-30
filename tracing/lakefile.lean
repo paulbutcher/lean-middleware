@@ -14,7 +14,8 @@ open Lake DSL
 Keeping it here is what makes tracing opt-in.
 -/
 package «middleware-tracing» where
-  version := v!"0.10.0"
+  -- Kept in step with `middleware`; see the note in the root lakefile.
+  version := v!"0.13.0"
 
 require middleware from ".."
 

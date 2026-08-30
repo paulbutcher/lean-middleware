@@ -7,8 +7,11 @@ import Lake
 
 open Lake DSL
 
+/-- All three packages carry the same version and are bumped together, whether or not each one
+changed. They are required separately but resolved into a single application, so one number is
+what says which combination of them an application is holding. -/
 package middleware where
-  version := v!"0.12.0"
+  version := v!"0.13.0"
 
 @[default_target]
 lean_lib Middleware
