@@ -45,7 +45,7 @@ def noopHandler : StatelessHandler :=
   { onRequest := fun _ => Response.ok |>.text "noop" }
 
 /-- Unlike `MemoryStore`, there's no server-side table to keep the `session` middleware itself
-correct -- this exercises the exact same `session` middleware code path, just with `CookieStore`
+correct; this exercises the exact same `session` middleware code path, just with `CookieStore`
 proving `SessionStore` genuinely is backend-agnostic, not just correct for the one instance
 `Tests/Session.lean` covers. -/
 def sessionRoundtripTest : IO Unit := do
@@ -79,7 +79,7 @@ def garbageCookieValueTest : IO Unit := do
       assertContains response "<missing>"
 
 /-- A cookie sealed under a *different* store's key is exactly as unreadable as one that was
-never validly sealed at all -- proves the AES-GCM tag, not just the base64/length-prefix framing,
+never validly sealed at all; proves the AES-GCM tag, not just the base64/length-prefix framing,
 is what's actually gating access. -/
 def tamperedCookieRejectedTest : IO Unit := do
   let store ← Middleware.CookieStore.new

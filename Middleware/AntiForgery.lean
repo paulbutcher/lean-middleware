@@ -55,7 +55,7 @@ structure AntiForgeryOptions where
   /-- Called in place of the inner handler when the token is missing or wrong. -/
   errorHandler : StatelessHandler := defaultAntiForgeryErrorHandler
   /-- If set, a request carrying this header (present and non-blank) is treated as safe without
-  needing a valid token at all -- e.g. same-origin fetch/XHR code that already sets a custom
+  needing a valid token at all, e.g. same-origin fetch/XHR code that already sets a custom
   header, something a cross-origin attacker's form or script can't forge under the browser's
   CORS rules. Off (`none`) by default. -/
   safeHeader : Option Header.Name := none
@@ -79,12 +79,12 @@ private def requestToken (req : Request Body.Stream) (paramName : String) : Opti
 token matching the one established for its session, or `options.errorHandler` runs in place of the
 inner handler. The token is delivered to a validated request via the `AntiForgeryToken` extension.
 
-Layered directly on `SessionData`/`SessionUpdate`, the same way `flash` is -- not behind a second
+Layered directly on `SessionData`/`SessionUpdate`, the same way `flash` is, not behind a second
 pluggable strategy abstraction, since this codebase's session storage is already pluggable via
 `SessionStore` and a second layer on top of it isn't earning its keep for a single, obvious
 strategy. Requires `session` wrapped outer to have anything to check against; if
 it isn't, every non-safe request fails validation (no stored token can ever be produced to match
-against), i.e. this middleware **fails closed** without `session` -- the opposite default from
+against), i.e. this middleware **fails closed** without `session`; the opposite default from
 every other middleware's graceful degradation, and deliberately so here. -/
 def antiForgery (options : AntiForgeryOptions := {}) : Middleware :=
   fun handler =>

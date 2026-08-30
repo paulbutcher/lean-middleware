@@ -54,10 +54,10 @@ structure CookieAttrs where
   sameSite : Option SameSite := none
 
 /-- Percent-encodes a cookie value so it's always valid `cookie-octet`. Deliberately built on
-`URI.EncodedString (r := isPChar)` (the same primitive `URI.EncodedSegment` -- path segments --
+`URI.EncodedString (r := isPChar)` (the same primitive `URI.EncodedSegment`, path segments,
 uses), not `URI.EncodedQueryParam`: the query encoding has a form-urlencoded-only convention of
 representing a space as a bare `+`, which is ambiguous with (and so corrupts) a value that itself
-legitimately contains a literal `+` -- a real bug caught by a `Plausible` round-trip test.
+legitimately contains a literal `+`, a real bug caught by a `Plausible` round-trip test.
 `isPChar` still leaves `;`, `,`, and `+` unescaped (all valid RFC 3986 `sub-delims`), so those
 three are escaped here on top: `;`/`,` because `cookie-octet` excludes them outright, `+` because
 `isPChar` has no such special meaning to worry about but escaping it keeps this independent of
@@ -146,18 +146,18 @@ deriving TypeName
 
 /-- Adds a cookie to a response's outgoing `Set-Cookie` list, preserving whatever's already
 there. `Extensions.insert` replaces same-type values wholesale, so this reads the existing list
-first rather than clobbering it -- lets `session`/`flash`/the application handler each
+first rather than clobbering it; lets `session`/`flash`/the application handler each
 contribute a cookie without knowing about each other. -/
 def appendSetCookie (resp : Response Body.Any) (c : SetCookie) : Response Body.Any :=
   let existing := (resp.extensions.get SetCookies).getD {}
   { resp with extensions := resp.extensions.insert ({ existing with
       cookies := existing.cookies ++ [c] } : SetCookies) }
 
-/-- Splits a `Cookie` header (`name1=value1; name2=value2`, RFC 6265 §4.2.1 -- no attributes,
+/-- Splits a `Cookie` header (`name1=value1; name2=value2`, RFC 6265 §4.2.1, no attributes,
 those are `Set-Cookie`-only) into decoded pairs. A pair whose value isn't validly
 percent-encoded is dropped rather than failing the whole header: real `Cookie` headers routinely
 carry stray entries from unrelated scripts, and RFC 6265 §5.3/6 anticipates lenient handling.
-Quoted cookie-values (`DQUOTE *cookie-octet DQUOTE`) aren't handled -- no real browser sends one
+Quoted cookie-values (`DQUOTE *cookie-octet DQUOTE`) aren't handled; no real browser sends one
 for a cookie this library itself set, and that's the only case this needs to round-trip. -/
 def parseCookieHeader (s : String) : List (String × String) :=
   (s.splitOn ";").filterMap fun part =>
@@ -170,7 +170,7 @@ def parseCookieHeader (s : String) : List (String × String) :=
       (decodeCookieValue rawValue).map (name, ·)
 
 /-- Attaches a `Cookies` extension parsed from the request's `Cookie` header, and converts any
-`SetCookies` accumulated on the response (see `appendSetCookie`) into `Set-Cookie` headers --
+`SetCookies` accumulated on the response (see `appendSetCookie`) into `Set-Cookie` headers,
 one header line per cookie (never comma-folded: RFC 6265 forbids it, since `Expires` values
 themselves contain commas). -/
 def cookies : Middleware :=

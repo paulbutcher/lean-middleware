@@ -17,7 +17,7 @@ namespace Middleware.Multipart
 /--
 Finds every position in `haystack` where `needle` occurs. Scans one byte position at a time
 regardless of whether a match was found there, so termination is the same simple "index strictly
-increases, bounded by `haystack.size`" argument `Std.Http.URI.isValidPercentEncoding` uses --
+increases, bounded by `haystack.size`" argument `Std.Http.URI.isValidPercentEncoding` uses;
 deliberately not a "jump to the next match" search, which would need a harder termination proof.
 -/
 @[expose] def findAllOccurrences (haystack needle : ByteArray) : Array Nat :=
@@ -67,7 +67,7 @@ def delimiterOf (boundary : String) : ByteArray :=
 
 /--
 Splits a multipart body into each part's raw bytes (headers + blank line + content, not yet
-parsed). Requires the body to start with the literal dash-boundary (no preamble) -- anything else
+parsed). Requires the body to start with the literal dash-boundary (no preamble); anything else
 is treated as malformed and yields no parts, per the pragmatic-subset scope (real clients never
 send a preamble; failing safely here is correct, not a limitation worth working around).
 -/
@@ -88,7 +88,7 @@ def splitParts (boundary : String) (body : ByteArray) : Array ByteArray :=
 
 def blankLine : ByteArray := "\r\n\r\n".toUTF8
 
-/-- Splits a part's raw bytes at the blank line into its header block (as text -- headers are
+/-- Splits a part's raw bytes at the blank line into its header block (as text; headers are
 always ASCII) and its content (left as raw bytes, since content may be arbitrary binary). -/
 def splitHeadersAndContent (partBytes : ByteArray) : Option (String × ByteArray) := do
   let pos ← (findAllOccurrences partBytes blankLine).toList.head?
@@ -151,7 +151,7 @@ structure MultipartOptions where
   maxPartCount : Nat := 100
   /--
   Any single part larger than this is rejected with `413`, checked against the part's raw bytes
-  (its header block included, not just its content) before parsing -- deliberately cheap to check
+  (its header block included, not just its content) before parsing, deliberately cheap to check
   first, so an oversized part is rejected before any header-parsing or storage-routing work.
   -/
   maxPartSize : Nat := 10 * 1024 * 1024
@@ -204,7 +204,7 @@ than `maxPartCount`, short-circuit to `413 Payload Too Large` without calling th
 (the same short-circuiting shape `catchAll` uses for `500`).
 
 Temp-file-backed parts (see `MultipartOptions.maxInMemoryPartSize`) are removed once the wrapped
-handler returns -- persist anything you need (read it, move it, stream it onward) during the
+handler returns; persist anything you need (read it, move it, stream it onward) during the
 request, not afterward.
 
 Unlike `params`, this does not restore a re-readable body afterward: nothing downstream re-parses

@@ -78,7 +78,7 @@ def fullStackParamsAndSessionTest : IO Unit := do
 /-- `catchAll`'s `try/catch` intercepts a thrown error before it ever unwinds back through
 `session`/`cookies`'s own response-side logic, so an established session is left completely
 untouched (no re-issued or modified `Set-Cookie`) when a later request on the same stack errors
-out -- not just "no session was ever written", but "an existing one is provably left alone". -/
+out, not just "no session was ever written", but "an existing one is provably left alone". -/
 def catchAllShieldsSessionOnErrorTest : IO Unit := do
   let store ← MemoryStore.new
   let capturedCookie ← IO.mkRef (none : Option String)
@@ -150,7 +150,7 @@ def multipartAndSessionHandler : StatelessHandler :=
       let visited := (req.extensions.get SessionData).getD {} |>.data.get "visited" |>.getD "<missing>"
       Response.ok |>.text s!"title={title};visited={visited}" }
 
-/-- A multipart body and a session cookie both resolve correctly in the same request -- draining
+/-- A multipart body and a session cookie both resolve correctly in the same request, draining
 the body for multipart parsing doesn't interfere with cookie/session extraction, which reads only
 the `Cookie` header, not the body. -/
 def multipartWithSessionTest : IO Unit := do
@@ -166,7 +166,7 @@ def multipartWithSessionTest : IO Unit := do
       assertContains response "visited=yes"
 
 /-- An `http` request behind a simulated reverse proxy is redirected to `https` before any inner
-middleware runs at all -- proven by wrapping a handler that throws if it's ever reached. -/
+middleware runs at all, proven by wrapping a handler that throws if it's ever reached. -/
 def sslRedirectShortCircuitsBeforeInnerStackTest : IO Unit :=
   check "an http request is redirected before reaching a handler that would throw"
     (mkGetClose "/secure")
@@ -177,7 +177,7 @@ def sslRedirectShortCircuitsBeforeInnerStackTest : IO Unit :=
       assertContains response "Location: https://example.com/secure"
 
 /-- The security-header middlewares sit outside `catchAll` in the recommended order specifically
-so a `500` still carries them -- confirmed against the real `catchAll` short-circuit, not just
+so a `500` still carries them, confirmed against the real `catchAll` short-circuit, not just
 each middleware in isolation. -/
 def securityHeadersSurviveCatchAllTest : IO Unit :=
   check "hsts and X-Frame-Options still apply to a 500 produced by catchAll" (mkGetClose "/")

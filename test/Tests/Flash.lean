@@ -38,7 +38,7 @@ def readFlashHandler : StatelessHandler :=
       Response.ok |>.text (message.getD "<none>") }
 
 /-- Reads the flash message and, unlike `readFlashHandler`, also persists the (already
-flash-stripped) session it received -- the pattern a real application needs so the message
+flash-stripped) session it received, the pattern a real application needs so the message
 is genuinely delivered once, not left sitting in the store (see `flash`'s doc comment). -/
 def readFlashAndPersistHandler : StatelessHandler :=
   { onRequest := fun req => do
@@ -122,11 +122,29 @@ def flashPassthroughWhenUntouchedTest : IO Unit := do
       assertContains response "<none>"
       assertAbsent response "Set-Cookie"
 
+/-- `flash` has nothing to read or write without `session` outside it, and a stack assembled
+without it is a mistake in the server, not a request carrying no message. The refusal has to
+short-circuit: a handler that ran and rendered "no messages" would look like an ordinary page,
+which is the failure this replaces. -/
+def refusesWithoutSessionTest : IO Unit := do
+  let entered ← IO.mkRef false
+  let handler : StatelessHandler :=
+    { onRequest := fun _ => do
+        entered.set true
+        Response.ok |>.text "reached" }
+  check "flash answers 500 when `session` isn't in the stack" (mkGetClose "/")
+    (cookies (flash handler)).onRequest fun response => do
+      assertStatus response "HTTP/1.1 500"
+      assertAbsent response "reached"
+  if ← entered.get then
+    throw <| IO.userError "expected the wrapped handler not to run at all"
+
 def run : IO Unit :=
   runGroup "Middleware.Flash" do
     flashDeliveredOnceWhenConsumerPersistsTest
     flashSurvivesIfConsumerDoesNotPersistTest
     flashMergesWithExplicitSessionWriteTest
     flashPassthroughWhenUntouchedTest
+    refusesWithoutSessionTest
 
 end Tests.Flash

@@ -20,11 +20,19 @@ open Middleware (file notModified)
 namespace Tests.File
 
 /--
-The safety argument for `Middleware.File.joinSafeSegments`: it succeeds exactly when every
-segment that went into it was safe, and then the result is exactly their `/`-intercalation,
-nothing more. Combined with `isSafeSegment`'s definition (no segment is `.`/`..`, none contains a
-separator or NUL), this means the joined string can never be interpreted as escaping above the
-root or introducing extra path components that weren't present as their own segment.
+The safety argument for `Middleware.File.joinSafeSegments`, and the reason `file` can serve a
+path built from a URL without a separate containment check afterwards: the join succeeds only
+when every segment going into it was safe, and when it does succeed it produces nothing beyond
+those segments joined by `/`. A path traversal would need either an unsafe segment to survive or
+an extra component to appear from somewhere, and this rules out both.
+
+For any segment array and any candidate `result`, the join equals `some result` exactly when two
+things hold together: every `s` in `segments` answers `true` to `isSafeSegment` (not empty, not
+`.` or `..`, and containing no `/` or NUL), and `result` is literally
+`String.intercalate "/" segments.toList`. Being an `iff` rather than an implication is what makes
+the second half exhaustive: it forbids any other string being returned, not merely asserting that
+this one is. It says nothing about percent-encoded segments, which `isSafeSegment`'s own
+documentation flags as needing to be decoded before they reach here.
 -/
 theorem joinSafeSegments_eq_some_iff (segments : Array String) (result : String) :
     Middleware.File.joinSafeSegments segments = some result ↔
@@ -40,6 +48,16 @@ theorem joinSafeSegments_eq_some_iff (segments : Array String) (result : String)
   · rintro ⟨hall, rfl⟩
     rw [if_pos (Array.all_eq_true_iff_forall_mem.mpr hall)]
 
+/--
+The failing direction stated directly: one bad segment anywhere is enough to defeat the whole
+join. `joinSafeSegments_eq_some_iff` already implies this, but a caller reasoning about an attack
+wants the contrapositive in the form the attack takes, namely a single hostile component among
+otherwise ordinary ones.
+
+For any segment array containing some `s` for which `isSafeSegment` answers `false`, the join
+returns `none`. The membership hypothesis carries no position, so the segment's place in the
+array is irrelevant, and no combination of surrounding safe segments can rescue it.
+-/
 theorem joinSafeSegments_eq_none_of_mem_unsafe (segments : Array String) (s : String)
     (hm : s ∈ segments) (hs : Middleware.File.isSafeSegment s = false) :
     Middleware.File.joinSafeSegments segments = none := by
@@ -48,7 +66,17 @@ theorem joinSafeSegments_eq_none_of_mem_unsafe (segments : Array String) (s : St
     simp [Array.all_eq_true_iff_forall_mem.mp hall s hm] at hs
   simp [Middleware.File.joinSafeSegments, hnot]
 
-/-- A `..` anywhere in the segments defeats the join outright, whatever surrounds it. -/
+/--
+The specific case worth naming, since it is the classic traversal: a `..` anywhere in the
+segments defeats the join outright, whatever surrounds it. Stating it separately means a reader
+checking this codebase against the attack does not have to unfold `isSafeSegment` to confirm it
+is covered.
+
+For any segment array with `".."` among its members, the join returns `none`. It follows from
+`joinSafeSegments_eq_none_of_mem_unsafe` with `isSafeSegment ".."` discharged by `rfl`, so the
+step from "`..` is a member" to "the join fails" rests on computation, not on a further
+assumption.
+-/
 theorem joinSafeSegments_eq_none_of_dotdot (segments : Array String) (h : ".." ∈ segments) :
     Middleware.File.joinSafeSegments segments = none :=
   joinSafeSegments_eq_none_of_mem_unsafe segments ".." h rfl

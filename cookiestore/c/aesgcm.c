@@ -5,7 +5,7 @@
 // two functions, `lean_aes256_gcm_seal`/`lean_aes256_gcm_open`. Both operate
 // on raw `ByteArray`s (Lean's `lean_sarray_*` scalar-array representation)
 // and assume, rather than validate for a hostile caller, that `key`/`nonce`
-// are exactly 32/12 bytes -- the only caller is `Middleware.CookieStore`,
+// are exactly 32/12 bytes, the only caller is `Middleware.CookieStore`,
 // which always generates them at that size itself.
 
 #include <lean/lean.h>

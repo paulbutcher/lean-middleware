@@ -18,7 +18,7 @@ namespace CookieStore
 private def pushU32BE (arr : ByteArray) (n : UInt32) : ByteArray :=
   arr.push (n >>> 24).toUInt8 |>.push (n >>> 16).toUInt8 |>.push (n >>> 8).toUInt8 |>.push n.toUInt8
 
-/-- A length-prefixed encoding of a `Session`'s key/value pairs (byte counts, not delimiters) --
+/-- A length-prefixed encoding of a `Session`'s key/value pairs (byte counts, not delimiters),
 deliberately not a text-escaping scheme: this project has already hit a real bug from exactly
 that (`+`-vs-space ambiguity in `Cookies.lean`'s early cookie-value encoding), and a
 length-prefixed format has no characters to escape in the first place. -/
@@ -56,7 +56,7 @@ private def readPairs (arr : ByteArray) (off : Nat) : Nat → Option (Session ×
     some ((key, value) :: rest, off)
 
 /-- The inverse of `serialize`. `none` on any malformed input (truncated, a length prefix past
-the end of the buffer, or bytes that aren't valid UTF-8) -- always the case for a genuinely
+the end of the buffer, or bytes that aren't valid UTF-8), always the case for a genuinely
 tampered blob, but such a blob never reaches here in practice since `aes256GcmOpen`'s
 authentication already rejects it first. -/
 def deserialize (arr : ByteArray) : Option Session := do
@@ -69,7 +69,7 @@ end CookieStore
 /-- Options for `CookieStore`. -/
 structure CookieStoreOptions where
   /-- The AES-256 key to encrypt sessions with. `none` mints a fresh random one at
-  `CookieStore.new` time -- convenient for development or a single-process deployment, but a
+  `CookieStore.new` time, convenient for development or a single-process deployment, but a
   restart then invalidates every outstanding session. A multi-instance or restart-tolerant
   deployment should configure one. -/
   key : Option ByteArray := none
@@ -77,7 +77,7 @@ structure CookieStoreOptions where
 /-- A `SessionStore` that keeps no server-side state at all: the session data is serialized,
 AES-256-GCM sealed, and the sealed blob itself (base64-encoded) becomes the cookie's value.
 `read`/`write` treat the `String` `session` threads through as that value directly rather than as
-a lookup key into anything -- `SessionStore`'s signature already supports this (`MemoryStore`
+a lookup key into anything; `SessionStore`'s signature already supports this (`MemoryStore`
 just happens to use it the other way). -/
 structure CookieStore where
   key : ByteArray

@@ -48,7 +48,7 @@ def presetContentTypeHandler (value : String) : StatelessHandler :=
   { onRequest := fun _ =>
       Response.ok.header Header.Name.contentType (Header.Value.ofString! value) |>.text "body" }
 
-/-- Whatever already-set `Content-Type` a handler produces, `contentType` leaves it alone --
+/-- Whatever already-set `Content-Type` a handler produces, `contentType` leaves it alone;
 checked against a handful of varied values (not just the single `application/json`
 `doesNotOverrideExistingTest` already covers), on a request path whose extension would otherwise
 infer something different. -/

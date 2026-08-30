@@ -25,7 +25,7 @@ end Middleware.Header.Name
 namespace Middleware
 
 /-- Sets `name` to `value`, replacing any value(s) already there rather than adding a second
-occurrence -- `Headers.insert` is additive (by design, for multi-value headers like
+occurrence; `Headers.insert` is additive (by design, for multi-value headers like
 `Set-Cookie`), and `Headers.replaceLast` is a no-op when the header is absent, so neither alone
 guarantees exactly one occurrence for a single-valued header. -/
 private def setHeader (headers : Headers) (name : Header.Name) (value : String) : Headers :=
@@ -51,7 +51,7 @@ def xFrameOptions (options : FrameOptions := .sameOrigin) : Middleware :=
         let headers := setHeader resp.line.headers Header.Name.xFrameOptions options.toWire
         pure { resp with line := { resp.line with headers } } }
 
-/-- `X-Content-Type-Options: nosniff` -- stops browsers guessing a resource's MIME type from its
+/-- `X-Content-Type-Options: nosniff`, stops browsers guessing a resource's MIME type from its
 content, preventing e.g. an uploaded image being sniffed and executed as a script. -/
 def xContentTypeOptions : Middleware :=
   fun handler =>
@@ -87,7 +87,7 @@ structure HstsOptions where
   maxAge : Nat := 31536000
   includeSubDomains : Bool := true
 
-/-- Sets `Strict-Transport-Security` (RFC 6797) on every response, unconditionally -- this
+/-- Sets `Strict-Transport-Security` (RFC 6797) on every response, unconditionally; this
 middleware doesn't itself verify the connection is actually secure; enabling it is a deployment
 decision. -/
 def hsts (options : HstsOptions := {}) : Middleware :=

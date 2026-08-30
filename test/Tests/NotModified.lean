@@ -18,18 +18,46 @@ open Middleware (notModified ETag IfNoneMatch LastModified)
 
 namespace Tests.NotModified
 
-/-- Weak comparison (RFC 9110 §8.8.3.2) turns entirely on the opaque tag: two `ETag`s with the
-same `value` match whatever their `weak` flags say, and two with different values never do. -/
+/--
+Weak comparison ignores the weakness flag entirely, which is what RFC 9110 §8.8.3.2 requires and
+is easy to get wrong in the obvious direction: comparing whole `ETag` values would make a
+resource that started emitting `W/"abc"` instead of `"abc"` stop matching the tag a client
+already holds, costing every such client a full re-download.
+
+For any tag text `value` and any two flags `w₁` and `w₂`, `ETag.weakMatches` answers `true` when
+handed two `ETag`s built from that same `value` with those flags. Since `w₁` and `w₂` range over
+both booleans independently, this covers the mixed strong-against-weak pairing as well as the two
+matching ones.
+-/
 theorem weakMatches_of_value_eq (value : String) (w₁ w₂ : Bool) :
     ETag.weakMatches { value, weak := w₁ } { value, weak := w₂ } = true := by
   simp [ETag.weakMatches]
 
+/--
+The converse direction: differing tag text never matches, so weak comparison cannot collapse two
+genuinely different representations into one. Without this, `weakMatches` answering `true`
+constantly would satisfy the previous theorem and still hand every client a `304` for content it
+has never seen.
+
+For any two `ETag`s `a` and `b` whose `value` fields differ, `ETag.weakMatches a b` answers
+`false`. The hypothesis is about the `value` fields only, so the conclusion holds whatever the
+two `weak` flags are, which is what makes this the exact complement of `weakMatches_of_value_eq`.
+-/
 theorem weakMatches_eq_false_of_ne (a b : ETag) (h : a.value ≠ b.value) :
     ETag.weakMatches a b = false := by
   simp [ETag.weakMatches, h]
 
-/-- A tag listed anywhere in an `If-None-Match` list is enough to make the request conditional,
-so a client sending several cached validators gets a `304` for whichever one it still holds. -/
+/--
+A tag listed anywhere in an `If-None-Match` list is enough to make the request conditional, so a
+client sending several cached validators gets a `304` for whichever one it still holds. A search
+that only consulted the first entry would silently re-send the body to any client offering more
+than one tag.
+
+For any list of tags `ts`, if some `t` is a member of `ts` and `t`'s `value` equals `e`'s, then
+`IfNoneMatch.matchesTag (.tags ts) e` answers `true`. The membership hypothesis carries no
+position, so the conclusion is independent of where in the list the matching tag sits; the `.any`
+constructor is a separate case, answering `true` unconditionally, and is not covered here.
+-/
 theorem matchesTag_of_mem (ts : List ETag) (t e : ETag) (hm : t ∈ ts) (hv : t.value = e.value) :
     IfNoneMatch.matchesTag (.tags ts) e = true := by
   simp only [IfNoneMatch.matchesTag, List.any_eq_true, ETag.weakMatches, beq_iff_eq]

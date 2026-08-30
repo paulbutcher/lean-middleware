@@ -84,7 +84,7 @@ def attrsRenderedTest : IO Unit :=
       assertContains response "SameSite=Lax"
 
 /-- `SetCookie.serialize` then `SetCookie.parse` recovers the original value, and the serialized
-header still consists of exactly the one `name=value` part -- an application-supplied value can
+header still consists of exactly the one `name=value` part; an application-supplied value can
 never smuggle in a `Set-Cookie` attribute of its own, whatever characters it contains. -/
 def cookieValueRoundtripHolds (value : String) : Bool :=
   let wire := (SetCookie.serialize { name := "x", value }).snd

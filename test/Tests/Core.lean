@@ -21,15 +21,36 @@ A stack can be split anywhere and applied in pieces. This is what makes the orde
 in `Middleware.apply`'s documentation composable: an application can group its middleware however
 it likes, or drop the ones it doesn't use, and the relative order of what remains still means the
 same thing.
+
+For any two middleware lists `mws₁` and `mws₂` and any base handler, applying the concatenation
+gives literally the same handler as applying `mws₂` to the base and then applying `mws₁` to that.
+Equality here is of `StatelessHandler` values, not of observed responses, so the claim is that
+the two groupings build the same handler rather than merely two handlers that happen to agree on
+the requests a test tries.
 -/
 theorem apply_append (mws₁ mws₂ : List Middleware) (base : StatelessHandler) :
     Middleware.apply (mws₁ ++ mws₂) base = Middleware.apply mws₁ (Middleware.apply mws₂ base) := by
   simp [Middleware.apply]
 
+/--
+The empty stack is the identity on handlers. An application that assembles its list conditionally
+and ends up adding nothing gets back exactly the handler it started with, so there is no
+"wrapped in nothing" case behaving differently from the unwrapped one.
+
+For any base handler, `Middleware.apply []` returns that same handler. The proof is `rfl`, so the
+two are equal by unfolding alone, which is the strongest form the claim admits.
+-/
 theorem apply_nil (base : StatelessHandler) : Middleware.apply [] base = base := rfl
 
-/-- `Middleware.id` can sit anywhere in a stack without changing what that stack does, so it's
-usable as a placeholder for a conditionally-enabled layer. -/
+/--
+`Middleware.id` can sit anywhere in a stack without changing what that stack does, so it is
+usable as a placeholder for a layer that is only sometimes enabled: an application can keep the
+shape of its list fixed and swap a real middleware for `id` rather than building two lists.
+
+For any middleware list `mws` and base handler, putting `Middleware.id` at the head of the list
+yields the same handler as leaving it out. Combined with `apply_append`, which lets the list be
+cut at any point, this covers `id` at any position, not just the head.
+-/
 theorem apply_id_cons (mws : List Middleware) (base : StatelessHandler) :
     Middleware.apply (Middleware.id :: mws) base = Middleware.apply mws base := rfl
 

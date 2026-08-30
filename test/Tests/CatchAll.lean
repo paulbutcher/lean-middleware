@@ -42,14 +42,21 @@ def onFailureCalledTest : IO Unit := do
   unless (← seen.get) do
     throw <| IO.userError "expected onFailure to run"
 
-/-- Attaching `onFailure` to the base handler and wrapping it is what makes `catchAll` able to
-report, so wrapping must leave the field alone in both directions: `catchAll` reads the one
-below it, and the server reads the one it returns. -/
+/--
+Attaching `onFailure` to the base handler and wrapping it is what makes `catchAll` able to
+report, so wrapping must leave the field alone in both directions: `catchAll` reads the one below
+it, and the server reads the one it returns. A wrapper that replaced or dropped the field would
+silence exactly the reporting the middleware exists to enable.
+
+For any handler, the `onFailure` field of `catchAll handler` is the very same field the wrapped
+handler carries. The proof is `rfl`, so this is definitional rather than a coincidence of the
+current implementation of `catchAll`'s `onRequest`.
+-/
 theorem catchAll_preserves_onFailure (handler : StatelessHandler) :
     (catchAll handler).onFailure = handler.onFailure := rfl
 
 /-- Whatever the thrown message says, the response is always exactly `500` with the fixed body
-`"Internal Server Error"` -- the original message never leaks into what the client sees. Checked
+`"Internal Server Error"`; the original message never leaks into what the client sees. Checked
 against a handful of varied messages (empty, long, containing the fixed response text itself,
 punctuation/unicode), not just the single `"boom"` `caughtErrorTest` already covers. -/
 def errorMessageNeverLeaksTest : IO Unit := do

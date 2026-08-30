@@ -16,7 +16,7 @@ open Std.Http.Server
 namespace Middleware.Charset
 
 /-- Whether a `Content-Type` value is text-based enough to need a charset, using plain substring
-checks (not a full media-type grammar) -- `text/*` or `application/xml`. -/
+checks (not a full media-type grammar); `text/*` or `application/xml`. -/
 def isTextBased (contentType : String) : Bool :=
   let ct := contentType.toLower
   ct.startsWith "text/" || (ct.splitOn "application/xml").length > 1
@@ -31,7 +31,7 @@ namespace Middleware
 
 /-- Appends `; charset={charset}` to the response's `Content-Type` when it's text-based
 (`Middleware.Charset.isTextBased`) and doesn't already declare one. No-op if there's no
-`Content-Type` at all -- run this after `contentType` (or anything else that sets one) for it to
+`Content-Type` at all; run this after `contentType` (or anything else that sets one) for it to
 have anything to act on. -/
 def defaultCharset (charset : String := "utf-8") : Middleware :=
   fun handler =>

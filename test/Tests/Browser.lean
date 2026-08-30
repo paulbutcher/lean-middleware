@@ -165,12 +165,33 @@ def maxAgeZeroClearsJarTest : IO Unit :=
     unless (← browser.cookie? "flavour") == none do
       throw <| IO.userError "expected Max-Age=0 to have removed the jar entry"
 
+/--
+The base case of the scraper's first half: given text that begins with the marker, `afterMarker`
+hands back precisely the remainder. Everything the token theorems say about a real page reduces
+to this once `afterMarker_of_no_earlier_match` has walked the page's leading text away.
+
+For any `marker` and any `rest`, `afterMarker marker (marker ++ rest)` is `some rest`. The empty
+marker is included rather than excluded: the `[]` case of `afterMarker` answers `some []` for it,
+which is the same `rest`, so the statement holds uniformly and needs no side condition.
+-/
 private theorem afterMarker_append (marker rest : List Char) :
     afterMarker marker (marker ++ rest) = some rest := by
   cases marker with
   | nil => cases rest <;> simp [afterMarker]
   | cons m ms => simp [afterMarker, List.isPrefixOf]
 
+/--
+The base case of the scraper's second half: given a value followed by its terminator, `upTo`
+stops at that terminator and returns exactly the value. This is what rules out an overrun, a
+token read past its closing delimiter and on into the rest of the page.
+
+For any `terminator`, `value` and `rest`, if no non-empty suffix `s` of `value` begins an
+occurrence of `terminator` when read together with what follows it (`h`), then
+`upTo terminator (value ++ (terminator ++ rest))` is `some value`. The hypothesis `h` is what
+forbids the terminator appearing inside the value, including the case where it straddles the
+value's tail and the terminator's own first characters, which is why it is stated over
+`s ++ (terminator ++ rest)` rather than over `value` alone.
+-/
 private theorem upTo_append (terminator value rest : List Char)
     (h : ∀ s, s <:+ value → s ≠ [] → ¬ terminator <+: (s ++ (terminator ++ rest))) :
     upTo terminator (value ++ (terminator ++ rest)) = some value := by
@@ -184,12 +205,35 @@ private theorem upTo_append (terminator value rest : List Char)
     rw [ih fun s hs hne => h s (hs.trans (List.suffix_cons c cs)) hne]
     simp
 
+/--
+The single-character terminator specialises `upTo_append` to a hypothesis a caller can actually
+check by eye: for a one-character terminator, "no occurrence straddles anything" is just "the
+character does not appear in the value". This is the form `tokenAfter_of_rendered` uses, where
+the terminator is the `"` closing a hidden form field.
+
+For any character `t`, `value` and `rest`, if `t` is not a member of `value`, then
+`upTo [t] (value ++ (t :: rest))` is `some value`. A one-character terminator cannot straddle a
+boundary, so simple non-membership is genuinely enough here where the general case needs the
+suffix-based hypothesis.
+-/
 private theorem upTo_singleton (t : Char) (value rest : List Char) (h : t ∉ value) :
     upTo [t] (value ++ (t :: rest)) = some value := by
   induction value with
   | nil => simp [upTo, List.isPrefixOf]
   | cons c cs ih => simp_all [upTo, List.isPrefixOf, Ne.symm]
 
+/--
+Leading page content that does not itself start the marker is skipped without effect: the scraper
+finds the same thing it would have found in the text alone. This is what makes the token theorems
+statements about a real page, where the marker is preceded by an arbitrary amount of unrelated
+HTML, rather than only about text that begins at the marker.
+
+For any `marker`, `pre` and `rest`, if no non-empty suffix `s` of `pre` begins an occurrence of
+`marker` when read together with `rest` (`h`), then `afterMarker marker (pre ++ rest)` equals
+`afterMarker marker rest`. The hypothesis is stated over `s ++ rest` rather than over `pre`
+because a marker can begin in `pre` and finish in `rest`; that straddling case is exactly what an
+"the marker does not occur in `pre`" hypothesis would miss.
+-/
 private theorem afterMarker_of_no_earlier_match (marker pre rest : List Char)
     (h : ∀ s, s <:+ pre → s ≠ [] → ¬ marker <+: (s ++ rest)) :
     afterMarker marker (pre ++ rest) = afterMarker marker rest := by
@@ -202,11 +246,20 @@ private theorem afterMarker_of_no_earlier_match (marker pre rest : List Char)
     simp only [afterMarker, List.isPrefixOf_iff_prefix, hne, if_false]
     exact ih fun s hs hne' => h s (hs.trans (List.suffix_cons c cs)) hne'
 
-/-- `tokenBetween` reads back exactly what was rendered: on a page whose first occurrence of
-`marker` (`hearlier`: nothing before it starts one) is followed by a `value` the `terminator`
-doesn't occur in (`hvalue`) and then the `terminator`, it yields `value` and nothing else,
-whatever else the page contains. A token misread here becomes a post the application refuses,
-with nothing about the refusal pointing back at the scraper. -/
+/--
+`tokenBetween` reads back exactly what was rendered, so a `Browser` posts the token the page
+really carries rather than a truncated or overrun reading of it. A token misread here becomes a
+post the application refuses, with nothing about the refusal pointing back at the scraper, which
+is the failure this is worth proving away.
+
+For strings `marker`, `terminator`, `pre`, `value` and `rest`: on the page
+`pre ++ marker ++ value ++ terminator ++ rest`, if nothing in `pre` starts an earlier occurrence
+of the marker (`hearlier`) and the terminator does not occur within the value (`hvalue`), then
+`tokenBetween marker terminator` of that page is `some value`, and nothing else. The two
+hypotheses are the two ways a page could defeat the scraper, an earlier marker and an early
+terminator; both are stated over suffixes read together with the following text, so each also
+covers the case of a match straddling the boundary between the two pieces.
+-/
 theorem tokenBetween_of_rendered (marker terminator pre value rest : String)
     (hearlier : ∀ s, s <:+ pre.toList → s ≠ [] →
       ¬ marker.toList <+: (s ++ (marker ++ value ++ terminator ++ rest).toList))
@@ -223,8 +276,19 @@ theorem tokenBetween_of_rendered (marker terminator pre value rest : String)
     upTo_append terminator.toList value.toList rest.toList hvalue,
     Option.map_some, String.ofList_toList]
 
-/-- The hidden-field case, where the terminator is a single `"` and `hvalue` is just "the value
-carries no quote". -/
+/--
+The hidden-field case, which is the default a `Browser` uses when no `tokenFrom` is given: the
+same guarantee as `tokenBetween_of_rendered` for a token closed by a plain `"`. Worth stating on
+its own because it is the shape almost every page uses, and because its second hypothesis is one
+a reader can check against the markup directly.
+
+For strings `marker`, `pre`, `value` and `rest`: on the page `pre ++ marker ++ value ++ "\"" ++
+rest`, if nothing in `pre` starts an earlier occurrence of the marker (`hearlier`) and the value
+contains no `"` (`hquote`), then `tokenAfter marker` of that page is `some value`. The terminator
+being a single character is what lets `hvalue`'s general suffix condition collapse to plain
+non-membership here; a token rendered inside an HTML attribute is delimited by `&quot;` instead
+and so falls outside this theorem, which is why `tokenBetween` exists.
+-/
 theorem tokenAfter_of_rendered (marker pre value rest : String)
     (hearlier : ∀ s, s <:+ pre.toList → s ≠ [] →
       ¬ marker.toList <+: (s ++ (marker ++ value ++ "\"" ++ rest).toList))

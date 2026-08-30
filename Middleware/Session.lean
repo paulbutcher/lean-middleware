@@ -87,16 +87,18 @@ inductive SessionUpdate where
   | delete
 deriving TypeName
 
-/-- Loads the session named by `options.cookieName` (via the `Cookies` extension -- requires
-`cookies` wrapped outer; degrades to "no session ever found" rather than crashing if it isn't)
-into a `SessionData` request extension, and applies any `SessionUpdate` the handler (or `flash`,
-on its behalf) attaches to the response: persisting a `.write`, deleting on `.delete`, and either
-way appending the session-id cookie via `appendSetCookie` for `cookies` to actually send. -/
+/-- Loads the session named by `options.cookieName` (via the `Cookies` extension, so `cookies`
+must be wrapped outer; a stack without it is refused by `missingLayer` rather than read as a
+request that simply carried no session cookie) into a `SessionData` request extension, and
+applies any `SessionUpdate` the handler (or `flash`, on its behalf) attaches to the response:
+persisting a `.write`, deleting on `.delete`, and either way appending the session-id cookie via
+`appendSetCookie` for `cookies` to actually send. -/
 def session [SessionStore σ] (store : σ) (options : SessionOptions := {}) : Middleware :=
   fun handler =>
     { handler with
       onRequest := fun req => do
-        let cookies := (req.extensions.get Cookies).getD {}
+        let some cookies := req.extensions.get Cookies
+          | (missingLayer "cookies" "session").onRequest req
         let key := cookies.get options.cookieName
         let data ← match key with
           | some k => pure ((← SessionStore.read store k).getD [])

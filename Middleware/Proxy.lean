@@ -22,7 +22,7 @@ end Middleware.Header.Name
 namespace Middleware
 
 /-- The scheme (`http`/`https`) a trusted reverse proxy reports the client actually used.
-`Std.Http.Server` has no built-in TLS support and so no native notion of scheme at all -- this is
+`Std.Http.Server` has no built-in TLS support and so no native notion of scheme at all; this is
 the only way anything in this library ever learns it. -/
 inductive Scheme where
   | http
@@ -30,7 +30,7 @@ inductive Scheme where
 deriving TypeName, BEq
 
 /-- Attaches a `Scheme` extension from `headerName` (default `X-Forwarded-Proto`), when its value
-is (case-insensitively) exactly `http` or `https`. Any other value -- including absent -- leaves
+is (case-insensitively) exactly `http` or `https`. Any other value, including absent, leaves
 the request untouched, treated as "no information provided" rather than an error. -/
 def forwardedScheme (headerName : Header.Name := Header.Name.xForwardedProto) : Middleware :=
   fun handler =>
@@ -47,7 +47,7 @@ def forwardedScheme (headerName : Header.Name := Header.Name.xForwardedProto) : 
           handler.onRequest { req with extensions := req.extensions.insert scheme } }
 
 /-- The client address a trusted reverse proxy reports, from the last comma-separated entry of
-`X-Forwarded-For` -- a single-hop-trusted-proxy assumption: safe only when exactly one proxy you
+`X-Forwarded-For`, a single-hop-trusted-proxy assumption: safe only when exactly one proxy you
 trust sits directly in front of this server and unconditionally appends the real client address.
 A bare string, not `Std.Http.Server.RemoteAddr` (`Net.SocketAddress`), since `X-Forwarded-For`
 carries no port. -/
@@ -72,7 +72,7 @@ def forwardedRemoteAddr (headerName : Header.Name := Header.Name.xForwardedFor) 
             handler.onRequest req }
 
 /-- `scheme://host` for the current request, using the `Scheme` extension (`forwardedScheme`) if
-present, else assuming `http` -- the safe-failure default for security-sensitive callers
+present, else assuming `http`, the safe-failure default for security-sensitive callers
 (`sslRedirect`/`absoluteRedirects`): this server has no other way to know, and silently assuming
 `https` would be the actively unsafe direction to guess wrong in. `none` if there's no `Host`
 header to build from. -/

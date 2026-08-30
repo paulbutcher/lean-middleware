@@ -17,7 +17,7 @@ open Middleware (defaultCharset)
 
 namespace Tests.Charset
 
-/-- Builds a response with exactly the given `Content-Type` and no body -- deliberately not via
+/-- Builds a response with exactly the given `Content-Type` and no body, deliberately not via
 `.text`, which always sets its own `Content-Type` (additively, per `Headers.insert`'s multi-value
 semantics) regardless of what the builder already has, which would leave two `Content-Type`
 headers on the response and defeat what this test is checking. -/

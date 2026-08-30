@@ -18,6 +18,19 @@ open Middleware.Multipart (findAllOccurrences)
 
 namespace Tests.Multipart
 
+/--
+Soundness of the accumulator: nothing the scanning loop collects is a position where the needle
+does not genuinely sit in bounds. This is half of what `findAllOccurrences_mem_iff` needs, and
+the half that keeps `splitParts` from cutting a part at a position that is not a delimiter,
+splicing one part's content into another's.
+
+For any `haystack`, `needle`, starting index `i` and accumulator `acc`: if every `j` already in
+`acc` satisfies both that `j + needle.size` is within `haystack.size` and that the
+`needle.size`-byte slice of `haystack` at `j` compares equal to `needle`, then every `j` in the
+result of running the loop from `i` satisfies the same two conditions. The invariant is carried
+rather than assumed of the answer: at the call site `acc` is `#[]`, for which the hypothesis is
+vacuous, and the conclusion is then about the fully populated array.
+-/
 private theorem loop_sound (haystack needle : ByteArray) (i : Nat) (acc : Array Nat) :
     (∀ j ∈ acc, j + needle.size ≤ haystack.size ∧
         (haystack.extract j (j + needle.size) == needle) = true) →
@@ -37,6 +50,16 @@ private theorem loop_sound (haystack needle : ByteArray) (i : Nat) (acc : Array 
     · exact hacc j hj
   | case2 i acc h => intro hacc; exact hacc
 
+/--
+The loop only ever appends: an index already in the accumulator is still there when the loop
+finishes. `loop_complete` needs this because it establishes membership at the single iteration
+that finds a match, and that fact then has to survive every later iteration.
+
+For any `haystack`, `needle`, starting index `i`, accumulator `acc` and index `x`: if `x` is in
+`acc`, then `x` is in the result of running the loop from `i` with `acc`. Since the loop's only
+mutation of `acc` is `Array.push`, this holds however many further matches the remaining bytes
+contain.
+-/
 private theorem loop_mem_of_mem (haystack needle : ByteArray) (i : Nat) (acc : Array Nat)
     (x : Nat) : x ∈ acc → x ∈ findAllOccurrences.loop haystack needle i acc := by
   fun_induction findAllOccurrences.loop haystack needle i acc with
@@ -49,6 +72,18 @@ private theorem loop_mem_of_mem (haystack needle : ByteArray) (i : Nat) (acc : A
     · exact hx
   | case2 i acc h => intro hx; exact hx
 
+/--
+Completeness of the scan: every genuine occurrence at or after the starting index is collected.
+This is the other half of `findAllOccurrences_mem_iff`, and the half that keeps `splitParts` from
+merging two parts into one by walking past a delimiter that was really there.
+
+For any `haystack`, `needle`, starting index `i` and accumulator `acc`, and any position `j` with
+`i ≤ j` and `j < haystack.size` at which the needle genuinely occurs (`j + needle.size` within
+bounds and the slice at `j` equal to `needle`), `j` is in the loop's result. The bound `i ≤ j` is
+what makes the statement provable by induction on the loop rather than vacuous: the loop cannot
+report matches it has already scanned past, and at the call site `i` is `0`, so every position
+qualifies.
+-/
 private theorem loop_complete (haystack needle : ByteArray) (i : Nat) (acc : Array Nat) (j : Nat)
     (hij : i ≤ j) (hjs : j < haystack.size)
     (hmatch : j + needle.size ≤ haystack.size ∧
@@ -68,7 +103,14 @@ private theorem loop_complete (haystack needle : ByteArray) (i : Nat) (acc : Arr
 `findAllOccurrences` reports exactly the in-bounds positions where `needle` really occurs:
 nothing spurious (which would make `splitParts` cut a part at a position that isn't a delimiter,
 splicing one part's content into another's) and nothing missed (which would silently merge two
-parts into one).
+parts into one). A multipart body is attacker-supplied, so a mis-split is a way to smuggle one
+form field's bytes into another's value.
+
+For any `haystack` and `needle`, an index `i` is a member of the result exactly when three things
+hold: `needle.isEmpty` is `false`, `i + needle.size` is within `haystack.size`, and the
+`needle.size`-byte slice of `haystack` starting at `i` compares equal to `needle`. Stating it as
+an `iff` is what makes both failure modes impossible at once, and the `isEmpty` conjunct records
+that the empty needle is answered with no positions at all rather than with every position.
 -/
 theorem findAllOccurrences_mem_iff (haystack needle : ByteArray) (i : Nat) :
     i ∈ findAllOccurrences haystack needle ↔

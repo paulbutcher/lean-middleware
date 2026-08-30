@@ -65,7 +65,7 @@ private def decodeQuad (c0 c1 c2 c3 : Char) : Option (List UInt8) := do
     some [(triple >>> 16).toUInt8, (triple >>> 8).toUInt8, triple.toUInt8]
 
 /-- `=` padding is only valid on the final 4-character group of a base64 string, and only as its
-last one or two characters -- rejected (`none`) anywhere else, rather than silently accepted. -/
+last one or two characters; rejected (`none`) anywhere else, rather than silently accepted. -/
 private def decodeGo : List Char → Option (List UInt8)
   | [] => some []
   | c0 :: c1 :: c2 :: c3 :: rest =>

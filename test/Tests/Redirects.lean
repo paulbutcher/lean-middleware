@@ -34,7 +34,7 @@ def redirectHandler (status : Status) (location : String) : StatelessHandler :=
         body := Body.Any.ofBody ({} : Body.Empty) } }
 
 /-- `mkGet`/`mkGetClose` already send `Host: example.com`, so that's the host every test here
-sees -- adding another `Host:` header ourselves would make the request itself invalid (multiple
+sees; adding another `Host:` header ourselves would make the request itself invalid (multiple
 `Host` headers), not exercise anything about `sslRedirect`/`absoluteRedirects`. -/
 def sslRedirectHttpsPassthroughTest : IO Unit :=
   check "an already-https request passes through to the inner handler"

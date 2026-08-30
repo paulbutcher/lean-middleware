@@ -23,6 +23,15 @@ namespace Middleware
 /-- Leaves the handler unchanged. -/
 @[expose] def id : Middleware := fun handler => handler
 
+/-- Answers a request that reached a middleware whose prerequisite layer wasn't in the stack.
+`500`, because the request is fine and the server is not. The body names both layers: nothing
+else about the response distinguishes a misconfigured stack from an ordinary empty result, so
+without it the mistake is only visible as behaviour that quietly never works. -/
+def missingLayer (required dependent : String) : StatelessHandler :=
+  { onRequest := fun _ =>
+      Response.internalServerError.text
+        s!"`{dependent}` requires `{required}` wrapped outer, which this stack does not have" }
+
 /--
 Applies a stack of middleware to a base handler. The first element of `mws` becomes the
 outermost layer, closest to the client; the last element sits closest to `base`. A request
@@ -63,8 +72,8 @@ convention:
 - `serverSpan` directly inside `catchAll`, so an exception from any layer below reaches its span
   first: the span records status `error` and the message the exception carried before `catchAll`
   turns it into a `500`. Outside `catchAll` the exception would already have become a response,
-  and the cause would be lost. The cost is that the layers above it go untimed -- all of them
-  header manipulation doing no I/O -- and that a span ending in an exception carries no
+  and the cause would be lost. The cost is that the layers above it go untimed, all of them
+  header manipulation doing no I/O, and that a span ending in an exception carries no
   `http.response.status_code`, since no response came back to it. `serverSpan` ships in the
   separate `middleware-tracing` package, so it can't be named here in code; an application that
   requires that package slots it in at this position.
@@ -78,16 +87,16 @@ convention:
   `Set-Cookie` (via `appendSetCookie`) to actually reach the client.
 - `flash` right after `session`, since flash data lives inside the session (a reserved key in
   `SessionData`/`SessionUpdate`) and has nothing to read or write without it.
-- `params`/`multipartParams` next -- request-body parsing, independent of the cookie/session
+- `params`/`multipartParams` next; request-body parsing, independent of the cookie/session
   layers above and of each other (they check disjoint `Content-Type`s and no-op otherwise, so
   using both together is safe if an application needs to accept either).
 - `antiForgery` right after `params`/`multipartParams`, since it reads a submitted token out of
   whichever of those two extensions is present, and before the application handler so it can
   short-circuit a request carrying a missing or wrong token without the handler ever running.
 - `absoluteRedirects` needs to see the real response's `Location` header, so it wraps everything
-  that might produce a redirect -- typically the application handler itself.
+  that might produce a redirect, typically the application handler itself.
 - `contentType` and `notModified` must each wrap whatever actually produces the response body
-  (typically `file`, or the application's own handler) -- both inspect headers on the *real*
+  (typically `file`, or the application's own handler); both inspect headers on the *real*
   response (`Content-Type` presence, `ETag`/`Last-Modified`), which don't exist until that inner
   layer runs. `defaultCharset` sits right outside `contentType`, finishing off whatever
   `Content-Type` that middleware (or the handler) set.

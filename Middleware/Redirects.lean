@@ -31,7 +31,7 @@ request-target over `https`, without calling the inner handler. Requests with no
 or no `Scheme` extension at all, are also passed through untouched (nothing to build a redirect
 target from; an absent `Scheme` is treated as `http`, per `requestOrigin`'s documented
 safe-failure default, so it's only the missing-`Host` case that actually falls through here).
-`GET`/`HEAD` get a cacheable `301`; anything else gets a `307`, which -- unlike `301`/`302` --
+`GET`/`HEAD` get a cacheable `301`; anything else gets a `307`, which, unlike `301`/`302`,
 preserves the original method and body on the client's follow-up request. -/
 def sslRedirect (options : SslRedirectOptions := {}) : Middleware :=
   fun handler =>

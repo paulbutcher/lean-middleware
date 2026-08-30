@@ -52,8 +52,8 @@ private def parseWire (s : String) : Option ETag :=
 def parse (v : Header.Value) : Option ETag :=
   parseWire v.value
 
-/-- Renders `"..."` or `W/"..."`, dropping from `value` anything `etagc` doesn't admit --
-notably `"` itself -- so an application-built tag can't escape its own quotes. -/
+/-- Renders `"..."` or `W/"..."`, dropping from `value` anything `etagc` doesn't admit,
+notably `"` itself, so an application-built tag can't escape its own quotes. -/
 def serialize (e : ETag) : Header.Name × Header.Value :=
   let inner := String.ofList (e.value.toList.filter Std.Http.Internal.Char.etagc)
   let raw := (if e.weak then "W/\"" else "\"") ++ inner ++ "\""

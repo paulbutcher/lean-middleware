@@ -22,7 +22,7 @@ private def hexToBytesGo : List Char → List UInt8
   | c0 :: c1 :: rest => (hexDigit c0 * 16 + hexDigit c1).toUInt8 :: hexToBytesGo rest
   | _ => []
 
-/-- Decodes a lowercase hex literal into bytes. A test-fixture-only helper -- not validated
+/-- Decodes a lowercase hex literal into bytes. A test-fixture-only helper, not validated
 against malformed input, since every call site here is a hardcoded, known-good vector. -/
 def hexToBytes (s : String) : ByteArray :=
   ByteArray.mk (hexToBytesGo s.toList).toArray

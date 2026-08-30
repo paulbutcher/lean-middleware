@@ -19,6 +19,18 @@ open Middleware (cookies session MemoryStore SessionData SessionUpdate SessionOp
 
 namespace Tests.Session
 
+/--
+Removing one key from a session leaves every lookup of a different key answering exactly as it
+did before. This is the arithmetic the other session theorems rest on: `Session.set` is defined
+as a filter followed by a cons, so nothing can be said about how `set` treats an untouched key
+without first knowing that the filter does not disturb it.
+
+For any session `s` and any two keys `k` and `k'` with `k'` distinct from `k`, searching the
+list filtered down to the pairs whose first component differs from `k` for a pair whose first
+component is `k'` finds the same thing as searching the unfiltered `s`. The hypothesis `k' ≠ k`
+is what makes this non-trivial rather than vacuous: without it the two sides differ precisely
+when `s` binds `k`.
+-/
 private theorem find?_filter_ne (s : Session) (k k' : String) (h : k' ≠ k) :
     (s.filter (·.fst != k)).find? (·.fst == k') = s.find? (·.fst == k') := by
   induction s with
@@ -30,21 +42,56 @@ private theorem find?_filter_ne (s : Session) (k k' : String) (h : k' ≠ k) :
       · simp [hk', h]
       · simp [hk, hk', ih]
 
+/--
+A session reads back what was last written to it. This is the base guarantee an application
+relies on every time it stores something in a session and expects to find it on the next request,
+and it holds whatever the session already contained, including a prior binding for the same key.
+
+For any session `s`, key `k` and value `v`, looking `k` up in `Session.set s k v` yields
+`some v`. Since `set` conses the new pair onto the front of the filtered list and `get` returns
+the first match, this says the fresh binding shadows anything `s` held for `k`, not merely that
+some binding for `k` exists.
+-/
 theorem get_set_self (s : Session) (k v : String) : (Session.set s k v).get k = some v := by
   simp [Session.set, Session.get]
 
+/--
+Removing a key really removes it, rather than leaving an older binding for the same key exposed
+underneath. That matters because `Session.set` prepends: a key written twice would leave two
+pairs in the list if `set` did not filter, and a `remove` that stripped only the first would
+resurrect the earlier value.
+
+For any session `s` and key `k`, looking `k` up in `Session.remove s k` yields `none`. As
+`remove` is a filter over the whole list rather than a search-and-delete, this holds however many
+times `k` appears in `s`.
+-/
 theorem get_remove_self (s : Session) (k : String) : (Session.remove s k).get k = none := by
   simp [Session.remove, Session.get]
 
-/-- Writing one key never disturbs another, so the reserved keys `flash` and `antiForgery` keep
-inside the session survive an application's own writes, and vice versa. -/
+/--
+Writing one key never disturbs another, so the reserved keys `flash` and `antiForgery` keep
+inside the session survive an application's own writes, and vice versa. Without this, two
+middleware sharing one session would be free to clobber each other's bookkeeping.
+
+For any session `s`, any key `k` being written with value `v`, and any other key `k'` distinct
+from `k`, looking `k'` up after the write gives exactly what it gave before. The hypothesis
+`k' ≠ k` is the whole content of the claim: it is what separates "another key" from the key just
+written, whose value `get_set_self` covers instead.
+-/
 theorem get_set_of_ne (s : Session) (k k' v : String) (h : k' ≠ k) :
     (Session.set s k v).get k' = s.get k' := by
   simp [Session.set, Session.get, Ne.symm h, find?_filter_ne s k k' h]
 
-/-- Repeatedly writing the same key replaces rather than accumulates, so a long-lived session
-can't grow without bound. That matters most for `CookieStore`, where the whole session has to fit
-in a cookie. -/
+/--
+Repeatedly writing the same key replaces rather than accumulates, so a long-lived session can't
+grow without bound. That matters most for `CookieStore`, where the whole session has to fit in a
+cookie and an append-only session would eventually stop being sendable at all.
+
+For any session `s`, key `k` and values `v₁` and `v₂`, setting `k` to `v₁` and then to `v₂` gives
+a session equal to setting `k` to `v₂` once. This is equality of the session lists themselves,
+not just of what `get` reports, which is what makes it a statement about size rather than only
+about lookups.
+-/
 theorem set_set (s : Session) (k v₁ v₂ : String) :
     Session.set (Session.set s k v₁) k v₂ = Session.set s k v₂ := by
   simp [Session.set]
@@ -143,6 +190,24 @@ def genSessionIdUniquenessTest : IO Unit := do
   unless ids.eraseDups.length == 20 do
     throw <| IO.userError s!"expected 20 distinct session ids, got duplicates in: {ids}"
 
+/-- `session` reads its id from the `Cookies` extension, so without `cookies` outside it there is
+no cookie to read and every request would look like a first visit: a new session minted each
+time, and nothing ever read back. Refusing says which layer is missing instead of presenting
+that as ordinary behaviour. -/
+def refusesWithoutCookiesTest : IO Unit := do
+  let store ← MemoryStore.new
+  let entered ← IO.mkRef false
+  let handler : StatelessHandler :=
+    { onRequest := fun _ => do
+        entered.set true
+        Response.ok |>.text "reached" }
+  check "session answers 500 when `cookies` isn't in the stack" (mkGetClose "/")
+    (session store {} handler).onRequest fun response => do
+      assertStatus response "HTTP/1.1 500"
+      assertAbsent response "reached"
+  if ← entered.get then
+    throw <| IO.userError "expected the wrapped handler not to run at all"
+
 def run : IO Unit :=
   runGroup "Middleware.Session" do
     sessionRoundtripTest
@@ -152,5 +217,6 @@ def run : IO Unit :=
     customCookieNameTest
     genSessionIdShapeTest
     genSessionIdUniquenessTest
+    refusesWithoutCookiesTest
 
 end Tests.Session

@@ -31,7 +31,7 @@ a literal `..` when decoded afterwards, downstream of the check meant to catch i
 /--
 Joins path segments into a root-relative path string, or `none` if any segment is unsafe (see
 `isSafeSegment`). Safe by construction: whenever this succeeds, every segment that went into it
-was safe, and the result is exactly their `/`-intercalation, nothing more -- see the
+was safe, and the result is exactly their `/`-intercalation, nothing more; see the
 `joinSafeSegments_eq_some_iff` theorem in `Tests/File.lean` for the proof.
 -/
 @[expose] def joinSafeSegments (segments : Array String) : Option String :=
@@ -110,7 +110,7 @@ directory, falls through to the inner handler (this middleware doesn't own 404 h
 Otherwise streams the file with `Last-Modified` and a weak `ETag` set
 from its metadata.
 
-Deliberately does not set `Content-Type` itself -- compose `contentType` outside it
+Deliberately does not set `Content-Type` itself; compose `contentType` outside it
 (`[contentType, notModified, file root]`) to reuse the existing extension-lookup table instead of
 duplicating it.
 -/
