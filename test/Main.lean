@@ -30,7 +30,6 @@ def main : IO Unit := do
   Tests.Extensions.run
   Tests.Tracing.run
   Tests.Crypto.AesGcm.run
-  Tests.Crypto.Base64.run
   Tests.CookieStore.run
   Tests.Integration.run
   IO.println "All tests passed."

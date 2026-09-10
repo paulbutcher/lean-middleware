@@ -6,7 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Session
-public import Middleware.Crypto.Base64
+public import Leancrypto.Codec.Base64
 public import MiddlewareCookieStore.AesGcm
 
 public section
@@ -87,7 +87,7 @@ def CookieStore.new (options : CookieStoreOptions := {}) : IO CookieStore := do
 
 instance : SessionStore CookieStore where
   read store sealedValue := do
-    let some raw := Crypto.Base64.decode sealedValue | pure none
+    let some raw := Leancrypto.Codec.Base64.decodeString sealedValue | pure none
     if raw.size < 12 then
       pure none
     else
@@ -99,7 +99,7 @@ instance : SessionStore CookieStore where
   write store _existingKey data := do
     let nonce ← Crypto.genNonce
     let sealed ← Crypto.aes256GcmSeal store.key nonce (CookieStore.serialize data)
-    pure (Crypto.Base64.encode (nonce ++ sealed))
+    pure (Leancrypto.Codec.Base64.encodeString (nonce ++ sealed))
   delete _store _key := pure ()
     -- No server-side state to remove; `session`'s own expiring `Set-Cookie` already handles
     -- clearing the client's copy.

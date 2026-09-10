@@ -22,6 +22,9 @@ require middleware from ".."
 require «lean-libcrypto» from git
   "https://github.com/paulbutcher/lean-libcrypto" @ "v0.2.0"
 
+require leancrypto from git
+  "https://github.com/paulbutcher/leancrypto" @ "v0.4.1"
+
 /-- The module root is `MiddlewareCookieStore` rather than `Middleware.CookieStore` because Lake
 resolves a module name to exactly one package, and the `Middleware.*` tree already belongs to
 `middleware`. The Lean namespaces are unaffected: this still defines `Middleware.CookieStore` and

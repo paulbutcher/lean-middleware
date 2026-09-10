@@ -25,6 +25,5 @@ public import Tests.Browser
 public import Tests.Extensions
 public import Tests.Tracing
 public import Tests.Crypto.AesGcm
-public import Tests.Crypto.Base64
 public import Tests.CookieStore
 public import Tests.Integration
