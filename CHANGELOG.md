@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.14.0] - 2026-09-10
+
+- `CookieStore` seals sessions through `lean-libcrypto` rather than a hand-written OpenSSL shim, so `Middleware.Crypto.aes256GcmSeal` and `aes256GcmOpen` now answer in `IO`.
+
 ## [0.13.0] - 2026-08-30
 
 - `session` and `flash` refuse a stack missing the layer they require, naming it, rather than reading its absence as a request that carried no cookie and no message.

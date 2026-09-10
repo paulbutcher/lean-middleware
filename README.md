@@ -158,7 +158,7 @@ It is not imported by `Middleware`, since it pulls in `Std.Http.Test.Helpers`. I
 ## Packages
 
 - **`middleware`**: everything apart from `CookieStore` and `serverSpan`. Depends on nothing beyond Lean core and Std.
-- **`middleware-cookiestore`**: `CookieStore` alone, which links OpenSSL's `libcrypto` via FFI.
+- **`middleware-cookiestore`**: `CookieStore` alone, which seals sessions with AES-256-GCM through `lean-libcrypto`, and so needs OpenSSL 3 and `pkg-config` to build.
 - **`middleware-tracing`**: `serverSpan` alone, which needs `telemetry`.
 
 Each is required separately, so an application pays for only what it uses:

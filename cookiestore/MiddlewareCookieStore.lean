@@ -93,12 +93,12 @@ instance : SessionStore CookieStore where
     else
       let nonce := raw.extract 0 12
       let sealed := raw.extract 12 raw.size
-      match Crypto.aes256GcmOpen store.key nonce sealed with
+      match ← Crypto.aes256GcmOpen store.key nonce sealed with
       | none => pure none
       | some plaintext => pure (CookieStore.deserialize plaintext)
   write store _existingKey data := do
     let nonce ← Crypto.genNonce
-    let sealed := Crypto.aes256GcmSeal store.key nonce (CookieStore.serialize data)
+    let sealed ← Crypto.aes256GcmSeal store.key nonce (CookieStore.serialize data)
     pure (Crypto.Base64.encode (nonce ++ sealed))
   delete _store _key := pure ()
     -- No server-side state to remove; `session`'s own expiring `Set-Cookie` already handles

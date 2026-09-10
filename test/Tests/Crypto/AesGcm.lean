@@ -67,7 +67,7 @@ def nistVectorSealTest : IO Unit :=
     let nonce := hexToBytes v.iv
     let plaintext := hexToBytes v.plaintext
     let expected := hexToBytes (v.ciphertext ++ v.tag)
-    check s!"seal matches NIST vector (key={v.key.take 8}...)" ((aes256GcmSeal key nonce plaintext) == expected)
+    check s!"seal matches NIST vector (key={v.key.take 8}...)" ((← aes256GcmSeal key nonce plaintext) == expected)
 
 def nistVectorOpenTest : IO Unit :=
   vectors.forM fun v => do
@@ -75,11 +75,11 @@ def nistVectorOpenTest : IO Unit :=
     let nonce := hexToBytes v.iv
     let sealed := hexToBytes (v.ciphertext ++ v.tag)
     let expected := hexToBytes v.plaintext
-    check s!"open recovers the plaintext (key={v.key.take 8}...)" ((aes256GcmOpen key nonce sealed) == some expected)
+    check s!"open recovers the plaintext (key={v.key.take 8}...)" ((← aes256GcmOpen key nonce sealed) == some expected)
 
 /-- Round-trip holds for any key/nonce/plaintext of the right shape. -/
-def roundtripHolds (key nonce plaintext : ByteArray) : Bool :=
-  aes256GcmOpen key nonce (aes256GcmSeal key nonce plaintext) == some plaintext
+def roundtripHolds (key nonce plaintext : ByteArray) : IO Bool := do
+  return (← aes256GcmOpen key nonce (← aes256GcmSeal key nonce plaintext)) == some plaintext
 
 def roundtripTest : IO Unit := do
   for _ in [0:20] do
@@ -87,41 +87,41 @@ def roundtripTest : IO Unit := do
     let nonce ← IO.getRandomBytes 12
     let len ← IO.rand 0 200
     let plaintext ← IO.getRandomBytes len.toUSize
-    check "roundtrip holds for a random key/nonce/plaintext" (roundtripHolds key nonce plaintext)
+    check "roundtrip holds for a random key/nonce/plaintext" (← roundtripHolds key nonce plaintext)
 
 def tamperedCiphertextRejectedTest : IO Unit := do
   let key ← IO.getRandomBytes 32
   let nonce ← IO.getRandomBytes 12
-  let sealed := aes256GcmSeal key nonce (String.toUTF8 "hello, session")
+  let sealed ← aes256GcmSeal key nonce (String.toUTF8 "hello, session")
   let tampered := ByteArray.mk (sealed.toList.set 0 (sealed.get! 0 ^^^ 0xFF)).toArray
-  check "flipping a ciphertext byte breaks authentication" ((aes256GcmOpen key nonce tampered) == none)
+  check "flipping a ciphertext byte breaks authentication" ((← aes256GcmOpen key nonce tampered) == none)
 
 def tamperedTagRejectedTest : IO Unit := do
   let key ← IO.getRandomBytes 32
   let nonce ← IO.getRandomBytes 12
-  let sealed := aes256GcmSeal key nonce (String.toUTF8 "hello, session")
+  let sealed ← aes256GcmSeal key nonce (String.toUTF8 "hello, session")
   let lastIdx := sealed.size - 1
   let tampered := ByteArray.mk (sealed.toList.set lastIdx (sealed.get! lastIdx ^^^ 0xFF)).toArray
-  check "flipping a tag byte breaks authentication" ((aes256GcmOpen key nonce tampered) == none)
+  check "flipping a tag byte breaks authentication" ((← aes256GcmOpen key nonce tampered) == none)
 
 def wrongKeyRejectedTest : IO Unit := do
   let key ← IO.getRandomBytes 32
   let wrongKey ← IO.getRandomBytes 32
   let nonce ← IO.getRandomBytes 12
-  let sealed := aes256GcmSeal key nonce (String.toUTF8 "hello, session")
-  check "the wrong key fails to open" ((aes256GcmOpen wrongKey nonce sealed) == none)
+  let sealed ← aes256GcmSeal key nonce (String.toUTF8 "hello, session")
+  check "the wrong key fails to open" ((← aes256GcmOpen wrongKey nonce sealed) == none)
 
 def wrongNonceRejectedTest : IO Unit := do
   let key ← IO.getRandomBytes 32
   let nonce ← IO.getRandomBytes 12
   let wrongNonce ← IO.getRandomBytes 12
-  let sealed := aes256GcmSeal key nonce (String.toUTF8 "hello, session")
-  check "the wrong nonce fails to open" ((aes256GcmOpen key wrongNonce sealed) == none)
+  let sealed ← aes256GcmSeal key nonce (String.toUTF8 "hello, session")
+  check "the wrong nonce fails to open" ((← aes256GcmOpen key wrongNonce sealed) == none)
 
 def emptyPlaintextRoundtripTest : IO Unit := do
   let key ← IO.getRandomBytes 32
   let nonce ← IO.getRandomBytes 12
-  check "an empty plaintext round-trips" (roundtripHolds key nonce ByteArray.empty)
+  check "an empty plaintext round-trips" (← roundtripHolds key nonce ByteArray.empty)
 
 def run : IO Unit :=
   runGroup "Middleware.Crypto.AesGcm" do
