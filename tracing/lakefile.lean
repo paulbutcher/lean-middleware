@@ -15,7 +15,7 @@ Keeping it here is what makes tracing opt-in.
 -/
 package «middleware-tracing» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.14.0"
+  version := v!"0.15.0"
 
 require middleware from ".."
 

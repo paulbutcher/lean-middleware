@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.0] - 2026-09-15
 
 - `cacheControl` sets a `Cache-Control` freshness policy.
 - A `304` from `notModified` carries the original response's `Cache-Control`, `Vary` and `Expires`.
