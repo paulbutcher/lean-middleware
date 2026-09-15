@@ -13,6 +13,7 @@ public import Tests.Params
 public import Tests.CacheControl
 public import Tests.NotModified
 public import Tests.File
+public import Tests.Assets
 public import Tests.Multipart
 public import Tests.Cookies
 public import Tests.Session

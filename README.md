@@ -81,6 +81,7 @@ A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after t
 - `cacheControl` (`Middleware/CacheControl.lean`): sets a `Cache-Control` freshness policy on any response that doesn't already carry one.
 - `notModified` (`Middleware/NotModified.lean`): downgrades a response to `304 Not Modified` based on `If-None-Match`/`If-Modified-Since` against the response's own `ETag`/`Last-Modified`.
 - `file` (`Middleware/File.lean`): serves static files from a root directory, with path-traversal protection, falling through to the wrapped handler for anything that isn't a real file under that root.
+- `assets` (`assets/MiddlewareAssets.lean`, in a separate package, see below): serves files under a path carrying the SHA-256 digest of their content, with a far-future `Cache-Control`, falling through for anything else.
 - `xFrameOptions`, `xContentTypeOptions`, `xXssProtection`, `hsts` (`Middleware/Security.lean`): static browser-security response headers (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Strict-Transport-Security`).
 - `defaultCharset` (`Middleware/Charset.lean`): appends `; charset=...` to a text-based `Content-Type` that doesn't already declare one.
 - `forwardedScheme`, `forwardedRemoteAddr` (`Middleware/Proxy.lean`): trust `X-Forwarded-Proto`/`X-Forwarded-For` from a reverse proxy, since `Std.Http.Server` has no built-in TLS support and so no native notion of request scheme at all.
@@ -109,6 +110,27 @@ Pass `missing` to answer with something other than the default `500`: `withParam
 These are handler combinators, not middleware; they wrap the innermost handler rather than appearing in `apply`'s list.
 
 Middleware apply the same rule to their own prerequisites, rather than degrading quietly: `session` without `cookies` outside it, and `flash` without `session`, each answer a `500` naming the missing layer instead of behaving as though the request simply carried no cookie and no message.
+
+## Fingerprinted assets
+
+`Assets` (`assets/MiddlewareAssets.lean`, in a separate package so that an application serving no assets doesn't resolve `leancrypto`) hashes every file under a root once, and serves each under a path carrying its digest:
+
+```lean
+import MiddlewareAssets
+
+open Middleware
+
+def buildAssetServer (a : Assets) (myApp : StatelessHandler) : StatelessHandler :=
+  Middleware.apply [contentType "application/octet-stream", assets a] myApp
+
+def stylesheetHref (a : Assets) : Option String := a.path? "css/auth.css"
+```
+
+Because the path changes whenever the content does, the far-future default policy is safe: there is no stale copy to dislodge. That is what the `no-cache` `cacheControl` default cannot offer, and why this is the layer to reach for when a redeployed asset has to reach browsers immediately.
+
+`path?` answers `none` for a name that was never loaded, rather than falling back to the unfingerprinted path, which under a far-future policy would pin stale bytes for a year. Rendering and serving read the same entries, so the two cannot disagree about what an asset is called; `Tests/Assets.lean` proves it.
+
+Unfingerprinted requests fall through, so `file` can sit inside for anything not worth hashing.
 
 ## Tracing
 

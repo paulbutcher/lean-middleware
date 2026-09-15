@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.16.0] - 2026-09-15
+
+- `middleware-assets` serves files under a path carrying the SHA-256 digest of their content, so a far-future cache policy can never pin a stale copy.
+
 ## [0.15.0] - 2026-09-15
 
 - `cacheControl` sets a `Cache-Control` freshness policy.

@@ -11,7 +11,7 @@ open Lake DSL
 changed. They are required separately but resolved into a single application, so one number is
 what says which combination of them an application is holding. -/
 package middleware where
-  version := v!"0.15.0"
+  version := v!"0.16.0"
 
 @[default_target]
 lean_lib Middleware

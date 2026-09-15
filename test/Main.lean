@@ -18,6 +18,7 @@ def main : IO Unit := do
   Tests.CacheControl.run
   Tests.NotModified.run
   Tests.File.run
+  Tests.Assets.run
   Tests.Multipart.run
   Tests.Cookies.run
   Tests.Session.run
