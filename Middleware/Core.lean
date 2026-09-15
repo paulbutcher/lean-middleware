@@ -52,7 +52,7 @@ Middleware.apply
    params, multipartParams, antiForgery,
    absoluteRedirects,
    contentType, defaultCharset,
-   notModified] (file root base)
+   cacheControl, notModified] (file root base)
 ```
 
 Each position follows from a dependency one of the middlewares actually has, not from
@@ -100,6 +100,9 @@ convention:
   response (`Content-Type` presence, `ETag`/`Last-Modified`), which don't exist until that inner
   layer runs. `defaultCharset` sits right outside `contentType`, finishing off whatever
   `Content-Type` that middleware (or the handler) set.
+- `cacheControl` next to `contentType`: a response carrying validators and no freshness
+  directive falls to heuristic freshness, so the client stops asking and `notModified` is never
+  reached. Either side of `notModified` works, since a `304` carries the header through.
 - `file` (or the application's own router) innermost: it falls through to whatever's inside it
   when a request path doesn't match a real file, so it needs to be the last thing before the
   application's own logic, not the first.

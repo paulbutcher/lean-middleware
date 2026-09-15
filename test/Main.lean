@@ -15,6 +15,7 @@ def main : IO Unit := do
   Tests.CatchAll.run
   Tests.ContentType.run
   Tests.Params.run
+  Tests.CacheControl.run
   Tests.NotModified.run
   Tests.File.run
   Tests.Multipart.run

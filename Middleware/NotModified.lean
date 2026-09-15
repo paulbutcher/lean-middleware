@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import Middleware.CacheControl
 public import Middleware.HeaderValue
 public import Std.Time
 
@@ -144,9 +145,10 @@ Downgrades a response to `304 Not Modified` when the request's `If-None-Match` o
 response's own `ETag`/`Last-Modified` headers (typically set by another middleware, e.g. `file`).
 `If-None-Match` takes precedence over `If-Modified-Since` when both are present (RFC 9110 §13.1.1).
 
-The `304` response keeps only the `ETag`/`Last-Modified` headers from the original response. A
-fully spec-precise `304` would also preserve `Cache-Control`/`Vary`/`Expires`; this library
-doesn't have middleware for those yet, so this is a deliberate simplification.
+The `304` carries the original response's `ETag`/`Last-Modified` and its
+`Cache-Control`/`Vary`/`Expires`. RFC 9111 §4.3.4 has a `304`'s headers update the stored
+response, so a freshness policy left off the `304` is one the client can never be told has
+changed, and `cacheControl` would only reach a client that had nothing cached yet.
 -/
 def notModified : Middleware :=
   fun handler =>
@@ -175,6 +177,9 @@ def notModified : Middleware :=
             headers := headers.insert (ETag.serialize etag).fst (ETag.serialize etag).snd
           if let some lm := respLastModified then
             headers := headers.insert (LastModified.serialize lm).fst (LastModified.serialize lm).snd
+          for name in [Header.Name.cacheControl, Header.Name.vary, Header.Name.expires] do
+            if let some values := resp.line.headers.getAll? name then
+              headers := headers.insertMany name values
           pure {
             line := { status := .notModified, version := resp.line.version, headers },
             body := Body.Any.ofBody ({} : Body.Empty) }

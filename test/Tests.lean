@@ -10,6 +10,7 @@ public import Tests.HeaderValue
 public import Tests.CatchAll
 public import Tests.ContentType
 public import Tests.Params
+public import Tests.CacheControl
 public import Tests.NotModified
 public import Tests.File
 public import Tests.Multipart

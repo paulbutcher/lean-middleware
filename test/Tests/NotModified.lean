@@ -115,6 +115,19 @@ def baseHandler : StatelessHandler :=
 
 def stack : StatelessHandler := notModified baseHandler
 
+/-- A `304` dropping `Vary` leaves the client revalidating against a stored response it can no
+longer tell applies to this request, and one dropping `Expires` re-dates a copy that should have
+been let go. -/
+def varyingHandler : StatelessHandler :=
+  { onRequest := fun req => do
+      let resp ← baseHandler.onRequest req
+      let headers := resp.line.headers
+        |>.insert Middleware.Header.Name.vary
+          (Middleware.Header.Value.ofStringSanitized "Accept-Encoding")
+        |>.insert Middleware.Header.Name.expires
+          (Middleware.Header.Value.ofStringSanitized "Thu, 01 Jan 2026 00:00:00 GMT")
+      pure { resp with line := { resp.line with headers } } }
+
 def etagMatchTest : IO Unit :=
   check "matching If-None-Match becomes 304"
     (mkGet "/" "If-None-Match: \"abc123\"\x0d\nConnection: close\x0d\n")
@@ -143,6 +156,14 @@ def ifModifiedSinceLaterTest : IO Unit :=
       assertStatus response "HTTP/1.1 304"
       assertAbsent response "hello"
 
+def varyAndExpiresPreservedTest : IO Unit :=
+  check "a 304 keeps Vary and Expires from the original response"
+    (mkGet "/" "If-None-Match: \"abc123\"\x0d\nConnection: close\x0d\n")
+    (notModified varyingHandler).onRequest fun response => do
+      assertStatus response "HTTP/1.1 304"
+      assertContains response "Vary: Accept-Encoding"
+      assertContains response "Expires: Thu, 01 Jan 2026 00:00:00 GMT"
+
 def ifNoneMatchPrecedenceTest : IO Unit :=
   check "mismatching If-None-Match wins over a satisfied If-Modified-Since"
     (mkGet "/"
@@ -158,6 +179,7 @@ def run : IO Unit :=
     ifModifiedSinceEarlierTest
     ifModifiedSinceLaterTest
     ifNoneMatchPrecedenceTest
+    varyAndExpiresPreservedTest
     etagRoundtripTest
     craftedETagsRoundtripTest
 

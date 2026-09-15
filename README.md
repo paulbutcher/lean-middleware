@@ -25,6 +25,7 @@ def buildSecureApiServer : StatelessHandler :=
      params,
      contentType "application/octet-stream", 
      defaultCharset "utf-8",
+     cacheControl .noCache,
      notModified]
     myApi
 ```
@@ -60,6 +61,7 @@ def buildSecureSiteServer (sessionStore : CookieStore)
      antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Lean-Anti-Forgery") },
      contentType "application/octet-stream",
      defaultCharset "utf-8",
+     cacheControl .noCache,
      notModified,
      file "public"]
     myApp
@@ -76,6 +78,7 @@ A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after t
 - `params` (`Middleware/Params.lean`): attaches query-string and `application/x-www-form-urlencoded` body parameters as a `Params` extension.
 - `multipartParams` (`Middleware/Multipart.lean`): parses `multipart/form-data` bodies (file uploads and mixed form fields), with size limits and size-threshold spooling to temp files.
 - `contentType` (`Middleware/ContentType.lean`): infers a `Content-Type` response header from the request path's file extension, when the handler hasn't already set one.
+- `cacheControl` (`Middleware/CacheControl.lean`): sets a `Cache-Control` freshness policy on any response that doesn't already carry one.
 - `notModified` (`Middleware/NotModified.lean`): downgrades a response to `304 Not Modified` based on `If-None-Match`/`If-Modified-Since` against the response's own `ETag`/`Last-Modified`.
 - `file` (`Middleware/File.lean`): serves static files from a root directory, with path-traversal protection, falling through to the wrapped handler for anything that isn't a real file under that root.
 - `xFrameOptions`, `xContentTypeOptions`, `xXssProtection`, `hsts` (`Middleware/Security.lean`): static browser-security response headers (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Strict-Transport-Security`).

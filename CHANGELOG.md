@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- `cacheControl` sets a `Cache-Control` freshness policy.
+- A `304` from `notModified` carries the original response's `Cache-Control`, `Vary` and `Expires`.
+
 ## [0.14.0] - 2026-09-10
 
 - `Middleware.Crypto.Base64` is gone; `CookieStore` encodes with `leancrypto`, whose base64 is proved to round-trip and refuses an encoding with bits set beyond the bytes it carries.

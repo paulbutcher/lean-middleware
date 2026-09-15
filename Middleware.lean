@@ -7,6 +7,7 @@ module
 
 public import Middleware.Core
 public import Middleware.HeaderValue
+public import Middleware.CacheControl
 public import Middleware.CatchAll
 public import Middleware.ContentType
 public import Middleware.Params
