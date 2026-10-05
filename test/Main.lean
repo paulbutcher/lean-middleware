@@ -24,6 +24,7 @@ def main : IO Unit := do
   Tests.Session.run
   Tests.Flash.run
   Tests.Security.run
+  Tests.Cors.run
   Tests.Charset.run
   Tests.Proxy.run
   Tests.Redirects.run
