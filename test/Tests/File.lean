@@ -46,7 +46,7 @@ theorem joinSafeSegments_eq_some_iff (segments : Array String) (result : String)
       exact ⟨Array.all_eq_true_iff_forall_mem.mp hall, (Option.some.injEq _ _).mp h |>.symm⟩
     · cases h
   · rintro ⟨hall, rfl⟩
-    rw [if_pos (Array.all_eq_true_iff_forall_mem.mpr hall)]
+    rw [ite_eq_left (Array.all_eq_true_iff_forall_mem.mpr hall)]
 
 /--
 The failing direction stated directly: one bad segment anywhere is enough to defeat the whole
