@@ -7,11 +7,13 @@ import Lake
 
 open Lake DSL
 
-/-- All three packages carry the same version and are bumped together, whether or not each one
-changed. They are required separately but resolved into a single application, so one number is
-what says which combination of them an application is holding. -/
+/-- Every shipped package in this repository, this one and each subdirectory's apart from `test`,
+carries the same version, and all are bumped together whether or not each one changed. They are
+required separately but resolved into a single application, so one number is what says which
+combination of them an application is holding. A new package starts at the current version and
+points back here with the same comment the others carry. -/
 package middleware where
-  version := v!"0.16.0"
+  version := v!"0.17.0"
 
 @[default_target]
 lean_lib Middleware

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.17.0] - 2026-10-18
 
 - `extract` runs typed `Extractor`s in order, answering the request with the first refusal.
 - `withParams`, `withSession`, `withToken`, `withFlash` and `withCookies` are gone; use `extract` with the matching `Extract` extractor.

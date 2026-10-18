@@ -180,16 +180,18 @@ It is not imported by `Middleware`, since it pulls in `Std.Http.Test.Helpers`. I
 
 ## Packages
 
-- **`middleware`**: everything apart from `CookieStore` and `serverSpan`. Depends on nothing beyond Lean core and Std.
+- **`middleware`**: everything apart from `CookieStore`, `serverSpan` and `assets`. Depends on nothing beyond Lean core and Std.
 - **`middleware-cookiestore`**: `CookieStore` alone, which seals sessions with AES-256-GCM through `lean-libcrypto`, and so needs OpenSSL 3 and `pkg-config` to build.
 - **`middleware-tracing`**: `serverSpan` alone, which needs `telemetry`.
+- **`middleware-assets`**: `Assets` and `assets` alone, which hash with `leancrypto`.
 
-Each is required separately, so an application pays for only what it uses:
+Each is required separately, so an application pays for only what it uses. All carry the same version, so any combination from one release works together:
 
 ```lean
 require middleware from git "https://github.com/..." @ "main"
 require «middleware-cookiestore» from git "https://github.com/..." @ "main" / "cookiestore"
 require «middleware-tracing» from git "https://github.com/..." @ "main" / "tracing"
+require «middleware-assets» from git "https://github.com/..." @ "main" / "assets"
 ```
 
 ## Formal verification
