@@ -25,6 +25,7 @@ public import Tests.Redirects
 public import Tests.AntiForgery
 public import Tests.Browser
 public import Tests.Extensions
+public import Tests.Extract
 public import Tests.Tracing
 public import Tests.Crypto.AesGcm
 public import Tests.CookieStore

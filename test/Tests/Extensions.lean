@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Extensions
+public import Middleware.Params
 public import Std.Http.Test.Helpers
 
 public section
@@ -13,8 +14,7 @@ public section
 open Std.Http
 open Std.Http.Server
 open Std.Http.Internal.Test
-open Middleware (cookies session flash params MemoryStore Params Flash
-  withParams withFlash)
+open Middleware (params Params requiring)
 
 namespace Tests.Extensions
 
@@ -22,7 +22,7 @@ namespace Tests.Extensions
 raised by the combinator and a `500` the handler itself chose look identical from the outside;
 only the flag tells them apart. -/
 def reportParams (entered : IO.Ref Bool) : StatelessHandler :=
-  { onRequest := withParams fun ps _ => do
+  { onRequest := requiring fun (ps : Params) _ => do
       entered.set true
       Response.ok.text s!"{ps.get "title" |>.getD "<absent>"}/{ps.get "note" |>.getD "<absent>"}" }
 
@@ -31,7 +31,7 @@ def formPost (body : String) : String :=
 
 def seesParametersTest : IO Unit := do
   let entered ← IO.mkRef false
-  check "withParams hands the handler the parsed parameters"
+  check "requiring hands the handler the parsed parameters"
     (formPost "title=hello&other=x") (params (reportParams entered)).onRequest fun response => do
       assertStatus response "HTTP/1.1 200"
       assertContains response "hello/<absent>"
@@ -42,7 +42,7 @@ def seesParametersTest : IO Unit := do
 handler, whereas the same emptiness read out of a missing extension would not. -/
 def emptyFormStillReachesHandlerTest : IO Unit := do
   let entered ← IO.mkRef false
-  check "withParams runs on an empty form, reporting absent parameters"
+  check "requiring runs on an empty form, reporting absent parameters"
     (formPost "") (params (reportParams entered)).onRequest fun response => do
       assertStatus response "HTTP/1.1 200"
       assertContains response "<absent>/<absent>"
@@ -51,7 +51,7 @@ def emptyFormStillReachesHandlerTest : IO Unit := do
 
 def refusesWithoutMiddlewareTest : IO Unit := do
   let entered ← IO.mkRef false
-  check "withParams answers 500 when `params` isn't in the stack"
+  check "requiring answers 500 when `params` isn't in the stack"
     (formPost "title=hello") (reportParams entered).onRequest fun response =>
       assertStatus response "HTTP/1.1 500"
   if ← entered.get then
@@ -62,7 +62,7 @@ def customMissingHandlerTest : IO Unit := do
   let missing : StatelessHandler :=
     { onRequest := fun _ => Response.serviceUnavailable.text "stack-misconfigured" }
   let handler : StatelessHandler :=
-    { onRequest := withParams (missing := missing) fun ps _ => do
+    { onRequest := requiring (missing := missing) fun (ps : Params) _ => do
         entered.set true
         Response.ok.text (ps.get "title" |>.getD "<absent>") }
   check "a supplied `missing` handler replaces the default 500"
@@ -72,23 +72,11 @@ def customMissingHandlerTest : IO Unit := do
   if ← entered.get then
     throw <| IO.userError "expected the wrapped handler not to run at all"
 
-/-- `flash` inserts a `Flash` whether or not a message is waiting, so a request that simply has
-none is served rather than refused; this is the distinction the whole combinator turns on. -/
-def flashPresentButEmptyTest : IO Unit := do
-  let store ← MemoryStore.new
-  let handler : StatelessHandler :=
-    { onRequest := withFlash fun f _ => Response.ok.text (f.message.getD "<no message>") }
-  check "withFlash runs for a request carrying no flash message" (mkGetClose "/")
-    (cookies (session store {} (flash handler))).onRequest fun response => do
-      assertStatus response "HTTP/1.1 200"
-      assertContains response "<no message>"
-
 def run : IO Unit :=
   runGroup "Middleware.Extensions" do
     seesParametersTest
     emptyFormStillReachesHandlerTest
     refusesWithoutMiddlewareTest
     customMissingHandlerTest
-    flashPresentButEmptyTest
 
 end Tests.Extensions

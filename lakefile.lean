@@ -17,15 +17,17 @@ package middleware where
 lean_lib Middleware
 
 /-- The suite lives in the `test` package, which is where the dependency on `Plausible` lives
-too. Running it from here keeps `lake test` at the repo root as the single entry point. -/
+too. Running it from here keeps `lake test` at the repo root as the single entry point, and runs
+`scripts/check-runtime.sh` so that a plain `import Lean` cannot reach consumers unnoticed. -/
 @[test_driver]
 script tests (args) do
+  let env := #[("LEAN_PATH", none), ("LEAN_SRC_PATH", none), ("LAKE", none), ("LAKE_HOME", none),
+    ("LAKE_PKG_URL_MAP", none), ("ELAN_TOOLCHAIN", none)]
   let lake ← IO.appPath
-  let suite ← IO.Process.spawn {
-    cmd := lake.toString
-    args := #["test"] ++ args.toArray
-    cwd := some "test"
-    env := #[("LEAN_PATH", none), ("LEAN_SRC_PATH", none), ("LAKE", none), ("LAKE_HOME", none),
-      ("LAKE_PKG_URL_MAP", none), ("ELAN_TOOLCHAIN", none)]
-  }
-  suite.wait
+  let suite ← IO.Process.spawn
+    { cmd := lake.toString, args := #["test"] ++ args.toArray, cwd := some "test", env }
+  let status ← suite.wait
+  if status != 0 then return status
+  let check ← IO.Process.spawn
+    { cmd := (__dir__ / "scripts" / "check-runtime.sh").toString, cwd := some __dir__, env }
+  check.wait

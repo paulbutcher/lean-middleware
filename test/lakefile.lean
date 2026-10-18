@@ -31,3 +31,7 @@ lean_lib Tests
 
 lean_exe tests where
   root := `Main
+
+/-- The subject of `scripts/check-runtime.sh` rather than a test, so not a default target. -/
+lean_exe leanFree where
+  root := `LeanFree

@@ -89,25 +89,23 @@ A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after t
 - `serverSpan` (`tracing/MiddlewareTracing.lean`): opens an OpenTelemetry `server` span around every request.
 - `antiForgery` (`Middleware/AntiForgery.lean`): CSRF protection via a session-backed synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on any non-safe request. Requires `session` wrapped outer.
 
-### Requiring an extension
+### Extractors
 
 A handler reading `(req.extensions.get Params).bind (·.get "title")` gets `none` both when the form was empty and when `params` was never in the stack. The second is a misconfigured server, and it goes unreported.
 
-`withParams` (`Middleware/Extensions.lean`) hands the parameters to the handler instead, and refuses the request with a `500` when nothing established them:
+An `Extractor α` (`Middleware/Extract.lean`) reads an `α` from the request for the handler, or answers the request with the response that ends it. `extract` runs extractors in order, each able to use the ones before it, and the first to refuse answers the request:
 
 ```lean
 def create : StatelessHandler :=
-  { onRequest := withParams fun ps _ =>
-      match ps.get "title" with
-      | some title => Response.ok.text title
-      | none => Response.badRequest.text "title is required" }
+  { onRequest := extract (_ ← Extract.token) (title ← Extract.field "title") =>
+      fun _ => Response.ok.text title }
 ```
 
-`withSession`, `withToken`, `withFlash` and `withCookies` do the same for the other extensions their middleware insert unconditionally, and `requiring` is the general form they are all specialisations of. `MultipartParams`, `ForwardedFor` and `Scheme` are inserted only when the request warrants one, so absence there says nothing about the stack and they get no helper.
+`Extract.params`, `Extract.session`, `Extract.token`, `Extract.flash` and `Extract.cookies` refuse with a `500` when the middleware that inserts their extension unconditionally was not in the stack, and `Extract.required` is the general form. `MultipartParams`, `ForwardedFor` and `Scheme` are inserted only when the request warrants one, so absence there says nothing about the stack and they get no extractor. Each takes `missing` to answer with something other than the default `500`. `Extract.field` refuses with a `400` naming a parameter the request lacks; `Extract.field?` answers `none` instead.
 
-Pass `missing` to answer with something other than the default `500`: `withParams (missing := myErrorPage) fun ps req => ...`.
+`Extractor` is a `Monad`, so an application writes its own as an ordinary value, taking any dependency as an argument: `def account (identity : Identity) : Extractor Account := do ...`.
 
-These are handler combinators, not middleware; they wrap the innermost handler rather than appearing in `apply`'s list.
+Extractors are not middleware; they wrap the innermost handler rather than appearing in `apply`'s list. `extract` is a macro, but reaches nothing from the Lean package at run time, which `lake test` checks.
 
 Middleware apply the same rule to their own prerequisites, rather than degrading quietly: `session` without `cookies` outside it, and `flash` without `session`, each answer a `500` naming the missing layer instead of behaving as though the request simply carried no cookie and no message.
 

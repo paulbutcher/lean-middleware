@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- `extract` runs typed `Extractor`s in order, answering the request with the first refusal.
+- `withParams`, `withSession`, `withToken`, `withFlash` and `withCookies` are gone; use `extract` with the matching `Extract` extractor.
+
 ## [0.16.0] - 2026-09-15
 
 - `middleware-assets` serves files under a path carrying the SHA-256 digest of their content, so a far-future cache policy can never pin a stale copy.

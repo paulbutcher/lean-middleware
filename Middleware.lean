@@ -23,6 +23,7 @@ public import Middleware.Proxy
 public import Middleware.Redirects
 public import Middleware.AntiForgery
 public import Middleware.Extensions
+public import Middleware.Extract
 
 /-
 `Middleware.Test.Browser` is deliberately absent from this list: it imports
