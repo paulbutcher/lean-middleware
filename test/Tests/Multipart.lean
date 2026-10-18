@@ -94,7 +94,7 @@ private theorem loop_complete (haystack needle : ByteArray) (i : Nat) (acc : Arr
     rcases Nat.eq_or_lt_of_le hij with rfl | hlt
     · refine loop_mem_of_mem _ _ _ _ _ ?_
       simp only [acc']
-      rw [dif_pos hmatch]
+      rw [dite_eq_left hmatch]
       exact Array.mem_push.mpr (Or.inr rfl)
     · exact ih hlt
   | case2 i acc h => exact absurd (Nat.lt_of_le_of_lt hij hjs) h

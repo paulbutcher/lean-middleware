@@ -201,7 +201,7 @@ private theorem upTo_append (terminator value rest : List Char)
     have hno : ¬ terminator <+: c :: (cs ++ (terminator ++ rest)) := by
       simpa using h (c :: cs) (List.suffix_refl _) (by simp)
     rw [List.cons_append]
-    simp only [upTo, List.isPrefixOf_iff_prefix, hno, if_false]
+    simp only [upTo, List.isPrefixOf_iff_prefix, hno, ite_false]
     rw [ih fun s hs hne => h s (hs.trans (List.suffix_cons c cs)) hne]
     simp
 
@@ -243,7 +243,7 @@ private theorem afterMarker_of_no_earlier_match (marker pre rest : List Char)
     have hne : ¬ marker <+: c :: (cs ++ rest) := by
       simpa using h (c :: cs) (List.suffix_refl _) (by simp)
     rw [List.cons_append]
-    simp only [afterMarker, List.isPrefixOf_iff_prefix, hne, if_false]
+    simp only [afterMarker, List.isPrefixOf_iff_prefix, hne, ite_false]
     exact ih fun s hs hne' => h s (hs.trans (List.suffix_cons c cs)) hne'
 
 /--
