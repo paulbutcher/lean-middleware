@@ -19,7 +19,7 @@ package «middleware-tracing» where
 
 require middleware from ".."
 
-require telemetry from git "https://github.com/paulbutcher/lean-telemetry" @ "v0.5.1"
+require telemetry from git "https://github.com/paulbutcher/lean-telemetry" @ "v0.5.2"
 
 /-- The module root is `MiddlewareTracing` rather than `Middleware.Tracing` because Lake resolves
 a module name to exactly one package, and the `Middleware.*` tree already belongs to `middleware`.
