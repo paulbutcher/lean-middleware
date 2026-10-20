@@ -13,7 +13,7 @@ required separately but resolved into a single application, so one number is wha
 combination of them an application is holding. A new package starts at the current version and
 points back here with the same comment the others carry. -/
 package middleware where
-  version := v!"0.17.0"
+  version := v!"0.17.1"
 
 @[default_target]
 lean_lib Middleware

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.17.1] - 2026-10-20
+
+- Chore: bump dependencies
+
 ## [0.17.0] - 2026-10-18
 
 - `extract` runs typed `Extractor`s in order, answering the request with the first refusal.
