@@ -42,9 +42,8 @@ def defaultCharset (charset : String := "utf-8") : Middleware :=
         | none => pure resp
         | some v =>
           if Charset.isTextBased v.value && !Charset.hasCharset v.value then
-            let newValue := Header.Value.ofStringSanitized s!"{v.value}; charset={charset}"
-            let headers := (resp.line.headers.erase Header.Name.contentType).insert
-              Header.Name.contentType newValue
+            let headers := setHeader resp.line.headers Header.Name.contentType
+              s!"{v.value}; charset={charset}"
             pure { resp with line := { resp.line with headers } }
           else
             pure resp }

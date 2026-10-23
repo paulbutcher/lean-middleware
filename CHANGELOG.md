@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `cors` answers CORS preflights and adds the allow headers to responses for allowed origins.
+
 ## [0.17.1] - 2026-10-20
 
 - Chore: bump dependencies

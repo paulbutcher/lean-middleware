@@ -18,6 +18,7 @@ public import Middleware.Cookies
 public import Middleware.Session
 public import Middleware.Flash
 public import Middleware.Security
+public import Middleware.Cors
 public import Middleware.Charset
 public import Middleware.Proxy
 public import Middleware.Redirects
