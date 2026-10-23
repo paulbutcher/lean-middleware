@@ -84,8 +84,7 @@ def absoluteRedirects : Middleware :=
               | some origin =>
                 let absolute :=
                   if loc.value.startsWith "/" then s!"{origin}{loc.value}" else s!"{origin}/{loc.value}"
-                let headers := (resp.line.headers.erase Header.Name.location).insert
-                  Header.Name.location (Header.Value.ofStringSanitized absolute)
+                let headers := setHeader resp.line.headers Header.Name.location absolute
                 pure { resp with line := { resp.line with headers } } }
 
 end Middleware

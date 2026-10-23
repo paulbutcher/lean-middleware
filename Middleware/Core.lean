@@ -67,7 +67,8 @@ convention:
   ship with none of them.
 - `cors` beside them and outside `catchAll` for the same reason: a `500` without the allow headers
   reaches a cross-origin script as an opaque network error rather than as an error it can read. It
-  answers a preflight itself, so no layer inside it sees one.
+  answers a preflight itself, so no layer inside it sees one, `serverSpan` included; a refused
+  origin, preflight or not, goes to `CorsOptions.onRefused`.
 - `catchAll` next, so it sees a failure from *any* layer below it and can turn it into a clean
   `500` instead of the connection tearing down. If it sat anywhere else, an exception thrown
   above it would go uncaught. It reports what it catches to `onFailure`, so an application that

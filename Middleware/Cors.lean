@@ -7,10 +7,10 @@ module
 
 public import Middleware.Core
 public import Middleware.HeaderValue
-public import Middleware.CacheControl
 
 public section
 
+open Std.Async
 open Std.Http
 open Std.Http.Server
 
@@ -31,90 +31,106 @@ end Middleware.Header.Name
 namespace Middleware
 
 /-- Which origins may read responses. `any` answers `*`, which browsers refuse to pair with
-credentials, so `CorsOptions.credentials` is ignored under it. -/
+credentials, so only the constructors that echo an origin can allow them. -/
 inductive AllowedOrigins where
   | any
-  | list (origins : List String)
-  | matching (allowed : String → Bool)
+  | list (origins : List String) (credentials : Bool := false)
+  | matching (allowed : String → Bool) (credentials : Bool := false)
 
-def AllowedOrigins.allows : AllowedOrigins → String → Bool
-  | .any, _ => true
-  | .list origins, origin => origins.contains origin
-  | .matching allowed, origin => allowed origin
+/-- Which request headers a preflight may approve. `reflect` approves whatever it asks for. -/
+inductive AllowedHeaders where
+  | reflect
+  | only (names : List String)
 
-/-- `allowHeaders := none` reflects whatever headers a preflight asks for. -/
 structure CorsOptions where
   origins : AllowedOrigins := .any
   methods : List Method := [.get, .head, .post, .put, .patch, .delete]
-  allowHeaders : Option (List String) := none
+  allowHeaders : AllowedHeaders := .reflect
   exposeHeaders : List String := []
-  credentials : Bool := false
   maxAge : Option Nat := some 600
+  /-- Called with each request whose `Origin` is not allowed, and that origin: a response
+  without allow headers says nothing about why it has none. -/
+  onRefused : Request Body.Stream → String → ContextAsync Unit := fun _ _ => pure ()
 
-private def set (name : Header.Name) (value : String) (headers : Headers) : Headers :=
-  (headers.erase name).insert name (Header.Value.ofStringSanitized value)
+/-- What `Access-Control-Allow-Origin` answers to a request's `Origin`, if anything, and whether
+credentials go with it. `*` goes on every response, `Origin` or not, since a stored response
+without it would otherwise be reused for a request that needs it. -/
+private def allowedOrigin : AllowedOrigins → Option String → Option (String × Bool)
+  | .any, _ => some ("*", false)
+  | .list origins credentials, some origin =>
+    if origins.contains origin then some (origin, credentials) else none
+  | .matching allowed credentials, some origin =>
+    if allowed origin then some (origin, credentials) else none
+  | _, none => none
 
-/-- The headers every answer to an allowed origin carries. A response that depends on the origin
-says so with `Vary`, or a shared cache would hand one origin's answer to another. -/
-private def originHeaders (options : CorsOptions) (origin : String) (headers : Headers) : Headers :=
-  match options.origins with
-  | .any => set Header.Name.accessControlAllowOrigin "*" headers
-  | _ =>
-    let headers := set Header.Name.accessControlAllowOrigin origin headers
-    if options.credentials then set Header.Name.accessControlAllowCredentials "true" headers
+private def allowOrigin (headers : Headers) : String × Bool → Headers
+  | (origin, credentials) =>
+    let headers := setHeader headers Header.Name.accessControlAllowOrigin origin
+    if credentials then setHeader headers Header.Name.accessControlAllowCredentials "true"
     else headers
 
-private def withVary (options : CorsOptions) (headers : Headers) : Headers :=
-  match options.origins with
-  | .any => headers
-  | _ => headers.insert Header.Name.vary (Header.Value.ofStringSanitized "Origin")
+/-- A policy that echoes the origin sends `Vary: Origin` on every response, including one to a
+request without `Origin`; otherwise a cache would reuse one origin's answer, or one stored from a
+non-CORS request, for another. A `Vary` already naming `Origin`, or `*`, covers it. -/
+private def varyOnOrigin : AllowedOrigins → Headers → Headers
+  | .any, headers => headers
+  | _, headers =>
+    let covered := ((headers.getAll? Header.Name.vary).getD #[]).any fun value =>
+      (value.value.splitOn ",").any fun name =>
+        let name := name.trimAscii.toString.toLower
+        name == "origin" || name == "*"
+    if covered then headers
+    else headers.insert Header.Name.vary (Header.Value.ofStringSanitized "Origin")
 
-private def preflightHeaders (options : CorsOptions) (requested : Option String) (headers : Headers) :
-    Headers :=
-  let headers := set Header.Name.accessControlAllowMethods
-    (", ".intercalate (options.methods.map toString)) headers
+private def preflightHeaders (options : CorsOptions) (requested : Option String)
+    (headers : Headers) : Headers :=
+  let headers := setHeader headers Header.Name.accessControlAllowMethods
+    (", ".intercalate (options.methods.map toString))
   let allowHeaders := match options.allowHeaders with
-    | some names => some (", ".intercalate names)
-    | none => requested
-  let headers := match allowHeaders with
-    | some names => if names.isEmpty then headers else set Header.Name.accessControlAllowHeaders names headers
-    | none => headers
+    | .reflect => requested.getD ""
+    | .only names => ", ".intercalate names
+  let headers := if allowHeaders.isEmpty then headers
+    else setHeader headers Header.Name.accessControlAllowHeaders allowHeaders
   match options.maxAge with
-  | some seconds => set Header.Name.accessControlMaxAge (toString seconds) headers
+  | some seconds => setHeader headers Header.Name.accessControlMaxAge (toString seconds)
   | none => headers
 
 /-- Cross-origin resource sharing (the Fetch standard's CORS protocol).
 
-A request without an `Origin` passes through untouched. A preflight, an `OPTIONS` naming the
-method it will use in `Access-Control-Request-Method`, is answered here with `204` and never reaches
-the handler. Any other request from an allowed origin reaches the handler and its response gains
-the allow headers; one from an origin that is not allowed gains none, which is how a browser learns
-to withhold it. -/
+A preflight, an `OPTIONS` carrying an `Origin` and naming the method it will use in
+`Access-Control-Request-Method`, is answered here with `204` and never reaches the handler, so it
+succeeds on any path, routed or not. Any other request reaches the handler, and its response
+gains the allow headers if its origin is allowed; one from an origin that is not gains none,
+which is how a browser learns to withhold it. -/
 def cors (options : CorsOptions := {}) : Middleware :=
   fun handler =>
     { handler with
       onRequest := fun req => do
-        let some origin := (req.line.headers.get? Header.Name.origin).map (·.value)
-          | handler.onRequest req
-        let allowed := options.origins.allows origin
-        let isPreflight := req.line.method == .options &&
-          (req.line.headers.get? Header.Name.accessControlRequestMethod).isSome
+        let origin := (req.line.headers.get? Header.Name.origin).map (·.value)
+        let allowed := allowedOrigin options.origins origin
+        if let some origin := origin then
+          if allowed.isNone then options.onRefused req origin
+        let isPreflight := origin.isSome && req.line.method == .options &&
+          req.line.headers.contains Header.Name.accessControlRequestMethod
         if isPreflight then
           let requested := (req.line.headers.get? Header.Name.accessControlRequestHeaders).map (·.value)
-          let headers := withVary options Headers.empty
-          let headers := if allowed then preflightHeaders options requested (originHeaders options origin headers)
-            else headers
+          let headers := match allowed with
+            | some allowed => preflightHeaders options requested (allowOrigin Headers.empty allowed)
+            | none => Headers.empty
           pure {
-            line := { status := .noContent, version := req.line.version, headers },
+            line := { status := .noContent, version := req.line.version,
+                      headers := varyOnOrigin options.origins headers },
             body := Body.Any.ofBody ({} : Body.Empty) }
         else
           let resp ← handler.onRequest req
-          let headers := withVary options resp.line.headers
-          let headers := if allowed then
-              let headers := originHeaders options origin headers
+          let headers := match allowed with
+            | some allowed =>
+              let headers := allowOrigin resp.line.headers allowed
               if options.exposeHeaders.isEmpty then headers
-              else set Header.Name.accessControlExposeHeaders (", ".intercalate options.exposeHeaders) headers
-            else headers
+              else setHeader headers Header.Name.accessControlExposeHeaders
+                (", ".intercalate options.exposeHeaders)
+            | none => resp.line.headers
+          let headers := varyOnOrigin options.origins headers
           pure { resp with line := { resp.line with headers } } }
 
 end Middleware
