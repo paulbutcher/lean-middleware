@@ -31,6 +31,7 @@ def main : IO Unit := do
   Tests.AntiForgery.run
   Tests.Browser.run
   Tests.Extensions.run
+  Tests.Extract.run
   Tests.Tracing.run
   Tests.Crypto.AesGcm.run
   Tests.CookieStore.run

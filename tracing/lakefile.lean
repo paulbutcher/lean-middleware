@@ -15,11 +15,11 @@ Keeping it here is what makes tracing opt-in.
 -/
 package «middleware-tracing» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.16.0"
+  version := v!"0.17.1"
 
 require middleware from ".."
 
-require telemetry from git "https://github.com/paulbutcher/lean-telemetry" @ "v0.5.0"
+require telemetry from git "https://github.com/paulbutcher/lean-telemetry" @ "v0.5.2"
 
 /-- The module root is `MiddlewareTracing` rather than `Middleware.Tracing` because Lake resolves
 a module name to exactly one package, and the `Middleware.*` tree already belongs to `middleware`.

@@ -5,11 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 module
 
-public import Middleware.AntiForgery
-public import Middleware.Cookies
-public import Middleware.Flash
-public import Middleware.Params
-public import Middleware.Session
+public import Middleware.Core
 
 public section
 
@@ -43,12 +39,8 @@ them.
 This is a handler combinator, not a `Middleware`: it wraps the innermost thing, and has no place
 in `apply`'s list.
 
-A specialisation below exists exactly where absence is a fact about the *stack*: `Params`,
-`SessionData`, `AntiForgeryToken`, `Flash` and `Cookies` are each inserted unconditionally by
-their middleware, `Flash` carrying its own `message : Option String` for "ran, nothing to say".
-`MultipartParams`, `ForwardedFor` and `Scheme` appear only when the request warrants one, so
-absence there is a fact about the request and there is nothing to refuse on; a `withMultipart`
-would reject every ordinary form post.
+`Extract.required` is the extractor form, and `Extract.params`, `Extract.session` and the rest are
+its specialisations.
 
 Reading an extension directly still compiles, and remains the right answer where a refusal costs
 more than a degraded response: code reached from outside any handler, such as a redirect that any
@@ -60,28 +52,5 @@ def requiring {α : Type} [TypeName α] (handler : ExtensionHandler α)
   match req.extensions.get α with
   | some value => handler value req
   | none => missing.onRequest req
-
-/-- `requiring` for the `Params` extension: absence means no `params` in the stack. -/
-abbrev withParams (handler : ExtensionHandler Params)
-    (missing : StatelessHandler := defaultMissingExtension) := requiring handler missing
-
-/-- `requiring` for the `SessionData` extension: absence means no `session` in the stack. -/
-abbrev withSession (handler : ExtensionHandler SessionData)
-    (missing : StatelessHandler := defaultMissingExtension) := requiring handler missing
-
-/-- `requiring` for the `AntiForgeryToken` extension: absence means no `antiForgery` in the
-stack, since a request that fails the check never reaches the handler at all. -/
-abbrev withToken (handler : ExtensionHandler AntiForgeryToken)
-    (missing : StatelessHandler := defaultMissingExtension) := requiring handler missing
-
-/-- `requiring` for the `Flash` extension: absence means no `flash` in the stack. A request with
-no message waiting still gets a `Flash`, with `message := none`. -/
-abbrev withFlash (handler : ExtensionHandler Flash)
-    (missing : StatelessHandler := defaultMissingExtension) := requiring handler missing
-
-/-- `requiring` for the `Cookies` extension: absence means no `cookies` in the stack. A request
-that sent no `Cookie` header still gets a `Cookies`, with no pairs. -/
-abbrev withCookies (handler : ExtensionHandler Cookies)
-    (missing : StatelessHandler := defaultMissingExtension) := requiring handler missing
 
 end Middleware

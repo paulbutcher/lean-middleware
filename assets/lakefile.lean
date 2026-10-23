@@ -14,12 +14,12 @@ resolves `require` package-wide.
 -/
 package «middleware-assets» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.16.0"
+  version := v!"0.17.1"
 
 require middleware from ".."
 
 require leancrypto from git
-  "https://github.com/paulbutcher/leancrypto" @ "v0.4.1"
+  "https://github.com/paulbutcher/leancrypto" @ "v0.4.2"
 
 /-- The module root is `MiddlewareAssets` rather than `Middleware.Assets` because Lake resolves a
 module name to exactly one package, and the `Middleware.*` tree already belongs to `middleware`.

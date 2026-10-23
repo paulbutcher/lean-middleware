@@ -24,10 +24,14 @@ require «middleware-tracing» from "../tracing"
 require «middleware-assets» from "../assets"
 
 require plausible from git
-  "https://github.com/leanprover-community/plausible" @ "v4.33.0"
+  "https://github.com/leanprover-community/plausible" @ "v4.34.0"
 
 @[default_target]
 lean_lib Tests
 
 lean_exe tests where
   root := `Main
+
+/-- The subject of `scripts/check-runtime.sh` rather than a test, so not a default target. -/
+lean_exe leanFree where
+  root := `LeanFree
