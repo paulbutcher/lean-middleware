@@ -11,7 +11,7 @@ public import Middleware.HeaderValue
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -23,6 +23,8 @@ def strictTransportSecurity : Header.Name := .mk "strict-transport-security"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 /-- Sets `name` to `value`, replacing any value(s) already there rather than adding a second
 occurrence; `Headers.insert` is additive (by design, for multi-value headers like
@@ -43,7 +45,7 @@ def FrameOptions.toWire : FrameOptions → String
   | .sameOrigin => "SAMEORIGIN"
   | .allowFrom uri => s!"ALLOW-FROM {uri}"
 
-def xFrameOptions (options : FrameOptions := .sameOrigin) : Middleware :=
+def xFrameOptions (options : FrameOptions := .sameOrigin) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -53,7 +55,7 @@ def xFrameOptions (options : FrameOptions := .sameOrigin) : Middleware :=
 
 /-- `X-Content-Type-Options: nosniff`, stops browsers guessing a resource's MIME type from its
 content, preventing e.g. an uploaded image being sniffed and executed as a script. -/
-def xContentTypeOptions : Middleware :=
+def xContentTypeOptions : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -73,7 +75,7 @@ def XssProtection.toWire : XssProtection → String
   | .enabled => "1"
   | .enabledBlock => "1; mode=block"
 
-def xXssProtection (mode : XssProtection := .enabledBlock) : Middleware :=
+def xXssProtection (mode : XssProtection := .enabledBlock) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -90,7 +92,7 @@ structure HstsOptions where
 /-- Sets `Strict-Transport-Security` (RFC 6797) on every response, unconditionally; this
 middleware doesn't itself verify the connection is actually secure; enabling it is a deployment
 decision. -/
-def hsts (options : HstsOptions := {}) : Middleware :=
+def hsts (options : HstsOptions := {}) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

@@ -6,30 +6,31 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Proxy
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (forwardedScheme forwardedRemoteAddr requestOrigin Scheme ForwardedFor)
 
 namespace Tests.Proxy
 
-def echoSchemeHandler : StatelessHandler :=
+def echoSchemeHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let scheme := match (req.extensions.get Scheme).getD .http with
         | .http => "http"
         | .https => "https"
       Response.ok |>.text scheme }
 
-def echoForwardedForHandler : StatelessHandler :=
+def echoForwardedForHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let addr := (req.extensions.get ForwardedFor).map (·.addr) |>.getD "<missing>"
       Response.ok |>.text addr }
 
-def echoOriginHandler : StatelessHandler :=
+def echoOriginHandler : StatelessHandler .std :=
   { onRequest := fun req => Response.ok |>.text ((requestOrigin req).getD "<no-origin>") }
 
 def httpsHeaderRecognizedTest : IO Unit :=

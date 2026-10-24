@@ -10,7 +10,7 @@ public import Middleware.Core
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Multipart
 
@@ -147,6 +147,11 @@ namespace Middleware
 
 /-- Options controlling `multipartParams`'s parsing limits and storage threshold. -/
 structure MultipartOptions where
+  /-- A body longer than this, all parts together, is rejected with `413` before any of it is
+  parsed. It bounds what a request can make the server hold in memory, which spooling large parts
+  to temp files does not: the whole body is read before any part is. Keep it above `maxPartSize`,
+  or a part of that size can never arrive. -/
+  maxBodySize : Nat := 16 * 1024 * 1024
   /-- Requests with more parts than this are rejected with `413`. -/
   maxPartCount : Nat := 100
   /--
@@ -199,9 +204,9 @@ private def removeTempFiles (parts : List Multipart.Part) : IO Unit :=
 
 /--
 Attaches a `MultipartParams` extension to the request when it's `multipart/form-data`, otherwise
-passes the request through unchanged. Parts over `MultipartOptions.maxPartSize`, or more parts
-than `maxPartCount`, short-circuit to `413 Payload Too Large` without calling the inner handler
-(the same short-circuiting shape `catchAll` uses for `500`).
+passes the request through unchanged. A body over `MultipartOptions.maxBodySize`, parts over
+`maxPartSize`, or more parts than `maxPartCount`, short-circuit to `413 Payload Too Large` without
+calling the inner handler (the same short-circuiting shape `catchAll` uses for `500`).
 
 Temp-file-backed parts (see `MultipartOptions.maxInMemoryPartSize`) are removed once the wrapped
 handler returns; persist anything you need (read it, move it, stream it onward) during the
@@ -210,16 +215,18 @@ request, not afterward.
 Unlike `params`, this does not restore a re-readable body afterward: nothing downstream re-parses
 a multipart body, and reconstructing one from temp-file-spooled parts wouldn't be useful.
 -/
-def multipartParams (options : MultipartOptions := {}) : Middleware :=
+def multipartParams {e : Engine} [ServerEngine e] (options : MultipartOptions := {}) :
+    Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
         match Multipart.boundaryOf req.line.headers with
         | none => handler.onRequest req
         | some boundary =>
-          let bodyBytes ← req.body.readAll (α := ByteArray)
+          let tooLarge := e.text (Response.withStatus .payloadTooLarge) "Payload Too Large"
+          let .ok bodyBytes ← ServerEngine.readBody req.body options.maxBodySize | tooLarge
           match ← parseMultipart boundary bodyBytes options with
-          | .tooLarge => Response.withStatus Status.payloadTooLarge |>.text "Payload Too Large"
+          | .tooLarge => tooLarge
           | .ok parts =>
             let req := { req with extensions := req.extensions.insert (MultipartParams.mk parts) }
             try

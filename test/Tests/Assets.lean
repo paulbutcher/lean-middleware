@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import MiddlewareAssets
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware
 
@@ -36,7 +37,7 @@ theorem path?_resolves (a : Assets) (logical served : String)
   obtain ⟨i, hi, he⟩ := Array.getElem_of_mem (Array.mem_of_find?_eq_some hfind)
   exact ⟨i, hi, by simp [he]⟩
 
-def notFoundHandler : StatelessHandler :=
+def notFoundHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.notFound |>.text "not found" }
 
 def withStylesheet {α : Type} (contents : String) (act : System.FilePath → IO α) : IO α := do
@@ -82,7 +83,7 @@ def servesFingerprintedPathTest : IO Unit :=
   withStylesheet "body { color: red }" fun dir => do
     let a ← Assets.load dir
     check "serves what path? renders, cached far into the future" (mkGetClose (← servedPath a))
-      ((assets a : Middleware) notFoundHandler).onRequest fun response => do
+      ((assets a : Middleware .std) notFoundHandler).onRequest fun response => do
         assertStatus response "HTTP/1.1 200"
         assertContains response "body { color: red }"
         assertContains response "Cache-Control: public, max-age=31536000, immutable"
@@ -93,7 +94,7 @@ def plainPathFallsThroughTest : IO Unit :=
   withStylesheet "body { color: red }" fun dir => do
     let a ← Assets.load dir
     check "the unfingerprinted path falls through to the inner handler" (mkGetClose "/css/auth.css")
-      ((assets a : Middleware) notFoundHandler).onRequest fun response =>
+      ((assets a : Middleware .std) notFoundHandler).onRequest fun response =>
         assertStatus response "HTTP/1.1 404"
 
 def run : IO Unit :=

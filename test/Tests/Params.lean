@@ -6,14 +6,17 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Params
+public import RoutingStd
+public import Tests.Pieces
 public import Std.Http.Test.Helpers
 public import Plausible
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
+open Tests.Pieces (checkInPieces)
 open Middleware (params Params)
 
 namespace Tests.Params
@@ -23,33 +26,33 @@ def formHeaders : String :=
 
 /-- Renders the looked-up value between brackets, so that a present-but-empty value is
 distinguishable from an absent one. -/
-def echoParamHandler (key : String) : StatelessHandler :=
+def echoParamHandler (key : String) : StatelessHandler .std :=
   { onRequest := fun req =>
       let value := ((req.extensions.get Params).bind (Params.get · key)).getD "<missing>"
       Response.ok |>.text s!"[{value}]" }
 
 def queryParamTest : IO Unit :=
   check "query param is extracted" (mkGetClose "/greet?name=world")
-    (params (echoParamHandler "name")).onRequest fun response =>
+    (params {} (echoParamHandler "name")).onRequest fun response =>
       assertContains response "[world]"
 
 def formParamTest : IO Unit :=
   check "form-urlencoded body param is extracted"
     (mkPost "/greet" "name=world" formHeaders)
-    (params (echoParamHandler "name")).onRequest fun response =>
+    (params {} (echoParamHandler "name")).onRequest fun response =>
       assertContains response "[world]"
 
 def formOverridesQueryTest : IO Unit :=
   check "form param takes precedence over query param"
     (mkPost "/greet?name=query" "name=form" formHeaders)
-    (params (echoParamHandler "name")).onRequest fun response => do
+    (params {} (echoParamHandler "name")).onRequest fun response => do
       assertContains response "[form]"
       assertAbsent response "query"
 
 def bodyStillReadableAfterParamsTest : IO Unit :=
   check "downstream handler can still read the body after params runs"
     (mkPost "/echo" "name=world" formHeaders)
-    (params { onRequest := echoHandler }).onRequest fun response =>
+    (params (e := .std) {} { onRequest := echoHandler }).onRequest fun response =>
       assertContains response "name=world"
 
 /-- Posts `spelling=on` and looks the field up under `name`, which `spelling` percent-decodes to.
@@ -58,7 +61,7 @@ so a name arrives spelled in ways the sender never wrote. -/
 def spellingTest (label spelling name : String) : IO Unit :=
   check s!"form field named {label} is found by its decoded name"
     (mkPost "/consent" s!"{spelling}=on&decision=allow" formHeaders)
-    (params (echoParamHandler name)).onRequest fun response =>
+    (params {} (echoParamHandler name)).onRequest fun response =>
       assertContains response "[on]"
 
 def encodedFormNameTests : IO Unit := do
@@ -72,13 +75,13 @@ def encodedFormNameTests : IO Unit := do
 def encodedQueryNameTest : IO Unit :=
   check "query-string param posted percent-encoded is found by its decoded name"
     (mkGetClose "/consent?approve-todos%3Aread=on")
-    (params (echoParamHandler "approve-todos:read")).onRequest fun response =>
+    (params {} (echoParamHandler "approve-todos:read")).onRequest fun response =>
       assertContains response "[on]"
 
 def valuelessNameTest : IO Unit :=
   check "a name present with no value reads as an empty value, not as absent"
     (mkPost "/consent" "flag&decision=allow" formHeaders)
-    (params (echoParamHandler "flag")).onRequest fun response =>
+    (params {} (echoParamHandler "flag")).onRequest fun response =>
       assertContains response "[]"
 
 /-- Encodes `(k{keyNum}, valueNum)` and `(k{otherKeyNum}, otherValueNum)` as a query string and
@@ -151,8 +154,41 @@ def browserRoundtripTest : IO Unit := do
   | .gaveUp n => throw <| IO.userError s!"gave up after {n} tries without satisfying the guard"
   | .failure _ steps _ => throw <| IO.userError s!"counter-example found: {steps}"
 
+/-- Answers with the length of field `a`, so that a body read whole shows as the length it sent. -/
+def lengthHandler : StatelessHandler .std :=
+  { onRequest := fun req =>
+      let value := ((req.extensions.get Params).bind (Params.get · "a")).getD ""
+      Response.ok |>.text s!"length {value.length}" }
+
+/-- A form post whose body is `body`, as raw bytes. -/
+def formPost (body : ByteArray) : ByteArray :=
+  s!"POST / HTTP/1.1\x0d\nHost: example.com\x0d\nContent-Length: {body.size}\x0d\n\
+    {formHeaders}\x0d\n".toUTF8 ++ body
+
+/-- Several of `checkInPieces`'s pieces long, so that the limit has to hold across reads. -/
+def largeForm : ByteArray :=
+  ("a=" ++ String.ofList (List.replicate 100000 'x')).toUTF8
+
+def bodyAtLimitTest : IO Unit :=
+  checkInPieces "a form body exactly at maxBodySize is read whole" (formPost largeForm)
+    (params { maxBodySize := largeForm.size } lengthHandler) fun response =>
+      assertContains response "length 100000"
+
+def bodyOverLimitTest : IO Unit :=
+  checkInPieces "a form body a byte over maxBodySize is refused with 413" (formPost largeForm)
+    (params { maxBodySize := largeForm.size - 1 } lengthHandler) fun response =>
+      assertStatus response "HTTP/1.1 413"
+
+def bodyNotUtf8Test : IO Unit :=
+  checkInPieces "a form body that is not UTF-8 is refused with 400"
+    (formPost (ByteArray.mk #[0x61, 0x3d, 0xff, 0xfe])) (params {} lengthHandler) fun response =>
+      assertStatus response "HTTP/1.1 400"
+
 def run : IO Unit :=
   runGroup "Middleware.Params" do
+    bodyAtLimitTest
+    bodyOverLimitTest
+    bodyNotUtf8Test
     queryParamTest
     formParamTest
     formOverridesQueryTest

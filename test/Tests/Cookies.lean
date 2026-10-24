@@ -6,32 +6,33 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Cookies
+public import RoutingStd
 public import Std.Http.Test.Helpers
 public import Plausible
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cookies Cookies SetCookie SetCookies CookieAttrs SameSite appendSetCookie)
 
 namespace Tests.Cookies
 
-def echoCookiesHandler : StatelessHandler :=
+def echoCookiesHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let pairs := (req.extensions.get Cookies).getD {} |>.pairs
       let summary := String.intercalate ";" (pairs.map fun (k, v) => s!"{k}={v}")
       Response.ok |>.text summary }
 
-def twoCookiesHandler : StatelessHandler :=
+def twoCookiesHandler : StatelessHandler .std :=
   { onRequest := fun _ => do
       let resp ← Response.ok |>.text "set"
       let resp := appendSetCookie resp { name := "a", value := "1" }
       let resp := appendSetCookie resp { name := "b", value := "2" }
       pure resp }
 
-def attrsCookieHandler : StatelessHandler :=
+def attrsCookieHandler : StatelessHandler .std :=
   { onRequest := fun _ => do
       let resp ← Response.ok |>.text "set"
       pure (appendSetCookie resp

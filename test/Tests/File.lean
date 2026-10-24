@@ -6,13 +6,14 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.File
+public import RoutingStd
 public import Middleware.NotModified
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Std.Async
 open Middleware (file notModified)
@@ -81,7 +82,7 @@ theorem joinSafeSegments_eq_none_of_dotdot (segments : Array String) (h : ".." �
     Middleware.File.joinSafeSegments segments = none :=
   joinSafeSegments_eq_none_of_mem_unsafe segments ".." h rfl
 
-def notFoundHandler : StatelessHandler :=
+def notFoundHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.notFound |>.text "not found" }
 
 /-- Creates a temp directory with a `hello.txt` fixture, runs `act`, then removes the directory. -/
@@ -146,10 +147,11 @@ def composesWithNotModifiedTest : IO Unit :=
 def repeated (n : Nat) : String :=
   String.join (List.replicate n "0123456789")
 
-def streamOf (path : System.FilePath) (size : Nat) (chunkSize : UInt64) : IO ByteArray :=
-  Async.block do
-    let stream ← Middleware.File.streamFile path size chunkSize
-    stream.readAll
+def streamOf (path : System.FilePath) (size : Nat) (chunkSize : UInt64) : IO ByteArray := do
+  let acc ← IO.mkRef ByteArray.empty
+  Async.block <| ContextAsync.run <| Middleware.File.streamFile (e := .std) path size chunkSize
+    fun chunk => (acc.modify (· ++ chunk) : IO Unit)
+  acc.get
 
 /-- Reassembly across chunk boundaries: the byte count the loop is bounded by must not stop it
 before the file's last byte, however many reads that takes. -/

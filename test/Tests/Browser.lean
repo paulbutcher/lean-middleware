@@ -6,11 +6,12 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Test.Browser
+public import RoutingStd
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cookies session params MemoryStore antiForgery AntiForgeryToken
   AntiForgeryOptions Params SessionData SessionUpdate SetCookie SetCookies Session)
@@ -20,9 +21,9 @@ namespace Tests.Browser
 
 /-- The field name the stack under test and `Browser`'s default `tokenFrom` have to agree on;
 taking it from the same place both do is what makes them agree. -/
-def tokenField : String := ({} : AntiForgeryOptions).paramName
+def tokenField : String := Middleware.defaultAntiForgeryParamName
 
-def appHandler : StatelessHandler :=
+def appHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       if req.line.method == .post then
         let title := ((req.extensions.get Params).bind (·.get "title")).getD "<none>"
@@ -33,7 +34,7 @@ def appHandler : StatelessHandler :=
           s!"<form method=\"post\" action=\"/submit\"><input type=\"hidden\" \
              name=\"{tokenField}\" value=\"{token}\"></form>" }
 
-def app (store : MemoryStore) : StatelessHandler :=
+def app (store : MemoryStore) : StatelessHandler .std :=
   Middleware.apply [cookies, session store {}, params, antiForgery {}] appHandler
 
 def formRoundTripTest : IO Unit :=
@@ -71,7 +72,7 @@ def encodedFieldValueTest : IO Unit :=
 
 /-- Carries the token the way an HTMX application does, in an `hx-headers` attribute, where it
 is quoted with an escaped `&quot;` rather than a raw `"`. -/
-def hxHeadersHandler : StatelessHandler :=
+def hxHeadersHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       if req.line.method == .post then
         let title := ((req.extensions.get Params).bind (·.get "title")).getD "<none>"
@@ -128,7 +129,7 @@ def postWithoutAntiForgeryTest : IO Unit :=
     let response ← browser.post "/submit" [("title", "hello")] .omitted
     assertContains response "posted:hello"
 
-def visitHandler : StatelessHandler :=
+def visitHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let data := ((req.extensions.get SessionData).getD {}).data
       match data.get "visited" with
@@ -146,7 +147,7 @@ def sessionCarriedByJarTest : IO Unit :=
     assertContains (← browser.get "/") "visited:none"
     assertContains (← browser.get "/") "visited:yes"
 
-def flavourHandler : StatelessHandler :=
+def flavourHandler : StatelessHandler .std :=
   { onRequest := fun req =>
       let cookie : SetCookie :=
         if toString req.line.uri.path == "/clear" then

@@ -9,21 +9,21 @@ public import Middleware.Core
 
 public section
 
-open Std.Async
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware
 
+variable {e : Engine}
+
 /-- A handler that is handed the request extension it needs, rather than reading it itself. -/
-abbrev ExtensionHandler (α : Type) :=
-  α → Request Body.Stream → ContextAsync (Response Body.Any)
+abbrev ExtensionHandler (e : Engine) (α : Type) := α → Result e
 
 /-- Answers a request that reached a handler without an extension the stack was supposed to
 establish. `500`, because the request is fine and the server is not. -/
-def defaultMissingExtension : StatelessHandler :=
+def defaultMissingExtension : StatelessHandler e :=
   { onRequest := fun _ =>
-      Response.internalServerError.text "a required request extension was not established" }
+      e.text Response.internalServerError "a required request extension was not established" }
 
 /--
 Hands a handler an extension rather than leaving it to ask for one, so that a stack assembled
@@ -46,9 +46,8 @@ Reading an extension directly still compiles, and remains the right answer where
 more than a degraded response: code reached from outside any handler, such as a redirect that any
 route can take, has no combinator to sit inside and may prefer to carry on without the value.
 -/
-def requiring {α : Type} [TypeName α] (handler : ExtensionHandler α)
-    (missing : StatelessHandler := defaultMissingExtension) :
-    Request Body.Stream → ContextAsync (Response Body.Any) := fun req =>
+def requiring {α : Type} [TypeName α] (handler : ExtensionHandler e α)
+    (missing : StatelessHandler e := defaultMissingExtension) : Result e := fun req =>
   match req.extensions.get α with
   | some value => handler value req
   | none => missing.onRequest req

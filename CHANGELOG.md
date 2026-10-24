@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Every middleware is generic over `routing`'s `Engine`, so it runs on LeanIn as well as `Std.Http.Server`; write `Middleware .std` where `Middleware` was.
+- `params` refuses a form body over `ParamsOptions.maxBodySize`, 1 MiB by default, with `413`, and one that is not UTF-8 with `400`.
+- `multipartParams` refuses a body over `MultipartOptions.maxBodySize`, 16 MiB by default, with `413`.
+- `file` and `assets` open a file only once its response is sent, so a response `notModified` replaces opens nothing.
+
 ## [0.17.1] - 2026-10-20
 
 - Chore: bump dependencies

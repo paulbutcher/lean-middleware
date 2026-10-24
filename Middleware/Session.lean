@@ -10,9 +10,11 @@ public import Middleware.Cookies
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware
+
+variable {e : Engine}
 
 /-- Server-side session data: an arbitrary string-keyed, string-valued map. -/
 abbrev Session := List (String × String)
@@ -93,7 +95,8 @@ request that simply carried no session cookie) into a `SessionData` request exte
 applies any `SessionUpdate` the handler (or `flash`, on its behalf) attaches to the response:
 persisting a `.write`, deleting on `.delete`, and either way appending the session-id cookie via
 `appendSetCookie` for `cookies` to actually send. -/
-def session [SessionStore σ] (store : σ) (options : SessionOptions := {}) : Middleware :=
+def session [ServerEngine e] [SessionStore σ] (store : σ) (options : SessionOptions := {}) :
+    Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

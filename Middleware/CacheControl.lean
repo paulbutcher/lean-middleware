@@ -11,7 +11,7 @@ public import Middleware.HeaderValue
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -22,6 +22,8 @@ def expires : Header.Name := .mk "expires"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 /--
 How long a stored response may be reused before the client has to ask again (RFC 9111 §5.2).
@@ -52,7 +54,7 @@ freshness (RFC 9111 §4.2.2), which browsers take as a fraction of the age since
 a file untouched for a fortnight is reused for about a day without any request at all, so
 `notModified` is never consulted and a redeployed asset stays stale in the browser.
 -/
-def cacheControl (policy : CachePolicy := .noCache) : Middleware :=
+def cacheControl (policy : CachePolicy := .noCache) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

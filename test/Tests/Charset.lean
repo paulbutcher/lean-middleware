@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Charset
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (defaultCharset)
 
@@ -21,13 +22,13 @@ namespace Tests.Charset
 `.text`, which always sets its own `Content-Type` (additively, per `Headers.insert`'s multi-value
 semantics) regardless of what the builder already has, which would leave two `Content-Type`
 headers on the response and defeat what this test is checking. -/
-def withContentType (value : String) : StatelessHandler :=
+def withContentType (value : String) : StatelessHandler .std :=
   { onRequest := fun _ =>
       pure ({
         line := { headers := Headers.empty.insert Header.Name.contentType (Header.Value.ofString! value) },
         body := Body.Any.ofBody ({} : Body.Empty) } : Response Body.Any) }
 
-def noContentTypeHandler : StatelessHandler :=
+def noContentTypeHandler : StatelessHandler .std :=
   { onRequest := fun _ => pure ({ body := Body.Any.ofBody ({} : Body.Empty) } : Response Body.Any) }
 
 def appendsToPlainTextTest : IO Unit :=

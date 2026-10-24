@@ -6,13 +6,14 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.NotModified
+public import RoutingStd
 public import Std.Http.Test.Helpers
 public import Plausible
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (notModified ETag IfNoneMatch LastModified)
 
@@ -105,7 +106,7 @@ def fixedETag : ETag := { value := "abc123", weak := false }
 def fixedLastModified : LastModified := { date := dateAt resourceTimestamp }
 
 /-- Always responds 200 "hello" with a fixed ETag and Last-Modified, as `file` would. -/
-def baseHandler : StatelessHandler :=
+def baseHandler : StatelessHandler .std :=
   { onRequest := fun _ => do
       let resp ← Response.ok |>.text "hello"
       let (etagName, etagValue) := ETag.serialize fixedETag
@@ -113,12 +114,12 @@ def baseHandler : StatelessHandler :=
       let headers := resp.line.headers.insert etagName etagValue |>.insert lmName lmValue
       pure ({ resp with line := { resp.line with headers } } : Response Body.Any) }
 
-def stack : StatelessHandler := notModified baseHandler
+def stack : StatelessHandler .std := notModified baseHandler
 
 /-- A `304` dropping `Vary` leaves the client revalidating against a stored response it can no
 longer tell applies to this request, and one dropping `Expires` re-dates a copy that should have
 been let go. -/
-def varyingHandler : StatelessHandler :=
+def varyingHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let resp ← baseHandler.onRequest req
       let headers := resp.line.headers

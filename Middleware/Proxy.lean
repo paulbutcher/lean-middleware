@@ -10,7 +10,7 @@ public import Middleware.Core
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -21,9 +21,11 @@ end Middleware.Header.Name
 
 namespace Middleware
 
+variable {e : Engine}
+
 /-- The scheme (`http`/`https`) a trusted reverse proxy reports the client actually used.
-`Std.Http.Server` has no built-in TLS support and so no native notion of scheme at all; this is
-the only way anything in this library ever learns it. -/
+The `Std.Http` request every engine shares carries no scheme at all, so this is the only way
+anything in this library ever learns it. -/
 inductive Scheme where
   | http
   | https
@@ -32,7 +34,8 @@ deriving TypeName, BEq
 /-- Attaches a `Scheme` extension from `headerName` (default `X-Forwarded-Proto`), when its value
 is (case-insensitively) exactly `http` or `https`. Any other value, including absent, leaves
 the request untouched, treated as "no information provided" rather than an error. -/
-def forwardedScheme (headerName : Header.Name := Header.Name.xForwardedProto) : Middleware :=
+def forwardedScheme (headerName : Header.Name := Header.Name.xForwardedProto) :
+    Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -57,7 +60,8 @@ deriving TypeName
 
 /-- Attaches a `ForwardedFor` extension from the last comma-separated entry of `headerName`
 (default `X-Forwarded-For`), if present. -/
-def forwardedRemoteAddr (headerName : Header.Name := Header.Name.xForwardedFor) : Middleware :=
+def forwardedRemoteAddr (headerName : Header.Name := Header.Name.xForwardedFor) :
+    Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -76,7 +80,7 @@ present, else assuming `http`, the safe-failure default for security-sensitive c
 (`sslRedirect`/`absoluteRedirects`): this server has no other way to know, and silently assuming
 `https` would be the actively unsafe direction to guess wrong in. `none` if there's no `Host`
 header to build from. -/
-def requestOrigin (req : Request Body.Stream) : Option String :=
+def requestOrigin {α : Type} (req : Request α) : Option String :=
   (req.line.headers.get? Header.Name.host).map fun hostValue =>
     let scheme := match (req.extensions.get Scheme).getD .http with
       | .http => "http"

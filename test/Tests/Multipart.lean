@@ -6,13 +6,16 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Multipart
+public import RoutingStd
+public import Tests.Pieces
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
+open Tests.Pieces (checkInPieces)
 open Middleware (multipartParams MultipartOptions MultipartParams)
 open Middleware.Multipart (findAllOccurrences)
 
@@ -143,7 +146,7 @@ def fileField (name filename contentType content : String) : String :=
 
 def closeBoundary : String := s!"--{boundary}--\x0d\n"
 
-def echoPartsHandler : StatelessHandler :=
+def echoPartsHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let mp := (req.extensions.get MultipartParams).getD { parts := [] }
       let summary := mp.parts.foldl (init := "") fun acc p =>
@@ -163,7 +166,7 @@ def parsesFieldsAndFilesTest : IO Unit :=
       assertContains response "upload=bytes:13"
 
 def nonMultipartPassesThroughTest : IO Unit :=
-  let passthroughHandler : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "passthrough" }
+  let passthroughHandler : StatelessHandler .std := { onRequest := fun _ => Response.ok |>.text "passthrough" }
   let stack := multipartParams {} passthroughHandler
   check "non-multipart request passes through unchanged" (mkGetClose "/")
     stack.onRequest fun response => do
@@ -191,7 +194,7 @@ def partTooLargeRejectedTest : IO Unit :=
 def sizeThresholdRoutingTest : IO Unit := do
   let capturedPath ← IO.mkRef (none : Option System.FilePath)
   let bigContent := String.ofList (List.replicate 2000 'x')
-  let handler : StatelessHandler :=
+  let handler : StatelessHandler .std :=
     { onRequest := fun req => do
         let mp := (req.extensions.get MultipartParams).getD { parts := [] }
         match mp.get "big" with
@@ -215,6 +218,26 @@ def sizeThresholdRoutingTest : IO Unit := do
     if ← path.pathExists then
       throw <| IO.userError s!"expected temp file {path} to be removed after the handler returns"
 
+/-- A request whose body is one file part several of `checkInPieces`'s pieces long, so that the
+total limit has to hold across reads. -/
+def largeBody : ByteArray :=
+  (fileField "big" "big.bin" "application/octet-stream" (String.ofList (List.replicate 100000 'x'))
+    ++ closeBoundary).toUTF8
+
+def largePost : ByteArray :=
+  s!"POST / HTTP/1.1\x0d\nHost: example.com\x0d\nContent-Length: {largeBody.size}\x0d\n\
+    {contentTypeHeader}\x0d\n".toUTF8 ++ largeBody
+
+def bodyAtLimitTest : IO Unit :=
+  checkInPieces "a body exactly at maxBodySize is parsed" largePost
+    (multipartParams { maxBodySize := largeBody.size } echoPartsHandler) fun response =>
+      assertContains response "big=bytes:100000"
+
+def bodyOverLimitTest : IO Unit :=
+  checkInPieces "a body a byte over maxBodySize becomes 413" largePost
+    (multipartParams { maxBodySize := largeBody.size - 1 } echoPartsHandler) fun response =>
+      assertStatus response "HTTP/1.1 413"
+
 def run : IO Unit :=
   runGroup "Middleware.Multipart" do
     parsesFieldsAndFilesTest
@@ -223,5 +246,7 @@ def run : IO Unit :=
     tooManyPartsRejectedTest
     partTooLargeRejectedTest
     sizeThresholdRoutingTest
+    bodyAtLimitTest
+    bodyOverLimitTest
 
 end Tests.Multipart

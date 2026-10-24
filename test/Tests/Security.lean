@@ -6,22 +6,23 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Security
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (xFrameOptions xContentTypeOptions xXssProtection hsts FrameOptions XssProtection
   HstsOptions)
 
 namespace Tests.Security
 
-def bareHandler : StatelessHandler :=
+def bareHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "ok" }
 
-def preSetHandler (name value : String) : StatelessHandler :=
+def preSetHandler (name value : String) : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok.header! name value |>.text "ok" }
 

@@ -11,7 +11,7 @@ public import Middleware.HeaderValue
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Charset
 
@@ -29,11 +29,13 @@ end Middleware.Charset
 
 namespace Middleware
 
+variable {e : Engine}
+
 /-- Appends `; charset={charset}` to the response's `Content-Type` when it's text-based
 (`Middleware.Charset.isTextBased`) and doesn't already declare one. No-op if there's no
 `Content-Type` at all; run this after `contentType` (or anything else that sets one) for it to
 have anything to act on. -/
-def defaultCharset (charset : String := "utf-8") : Middleware :=
+def defaultCharset (charset : String := "utf-8") : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

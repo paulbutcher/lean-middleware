@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (catchAll cookies session flash params contentType notModified file
   multipartParams MemoryStore SessionStore SessionData SessionUpdate Params MultipartParams
@@ -38,22 +39,22 @@ def extractCookieValue (response : ByteArray) (name : String) : Option String :=
 
 /-- The recommended default order from `Middleware.apply`'s doc comment, minus `file` (each test
 supplies its own base handler). -/
-def stackAround (store : MemoryStore) (handler : StatelessHandler) : StatelessHandler :=
+def stackAround (store : MemoryStore) (handler : StatelessHandler .std) : StatelessHandler .std :=
   Middleware.apply
     [catchAll, cookies, session store {}, flash, params,
      contentType "application/octet-stream", notModified] handler
 
-def paramsAndSessionHandler : StatelessHandler :=
+def paramsAndSessionHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let name := ((req.extensions.get Params).bind (Params.get · "name")).getD "<no-name>"
       Response.ok |>.extension (SessionUpdate.write [("visited", "yes")]) |>.text s!"name={name}" }
 
-def readVisitedHandler : StatelessHandler :=
+def readVisitedHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let data := (req.extensions.get SessionData).getD {} |>.data
       Response.ok |>.text (data.get "visited" |>.getD "<missing>") }
 
-def throwingHandler : StatelessHandler :=
+def throwingHandler : StatelessHandler .std :=
   { onRequest := fun _ => throw (IO.Error.userError "integration boom") }
 
 /-- A query param, a form param won't apply here since it's a GET, but the query param and a
@@ -94,7 +95,7 @@ def catchAllShieldsSessionOnErrorTest : IO Unit := do
         assertStatus response "HTTP/1.1 500"
         assertAbsent response "Set-Cookie"
 
-def notFoundHandler : StatelessHandler :=
+def notFoundHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.notFound |>.text "not found" }
 
 /-- Creates a temp directory with a `hello.txt` fixture, runs `act`, then removes the directory. -/
@@ -139,7 +140,7 @@ def multipartBody : String :=
   s!"--{multipartBoundary}\x0d\nContent-Disposition: form-data; name=\"title\"\x0d\n\x0d\n\
     hello\x0d\n--{multipartBoundary}--\x0d\n"
 
-def multipartAndSessionHandler : StatelessHandler :=
+def multipartAndSessionHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let title :=
         match (req.extensions.get MultipartParams).getD { parts := [] } |>.get "title" with
@@ -187,12 +188,12 @@ def securityHeadersSurviveCatchAllTest : IO Unit :=
       assertContains response "Strict-Transport-Security"
       assertContains response "X-Frame-Options: SAMEORIGIN"
 
-def echoAntiForgeryTokenHandler : StatelessHandler :=
+def echoAntiForgeryTokenHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let token := (req.extensions.get AntiForgeryToken).map (·.value) |>.getD "<missing>"
       Response.ok |>.text token }
 
-def reachedInnerHandler : StatelessHandler :=
+def reachedInnerHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "reached-inner" }
 
 /-- `cookies, session, params, antiForgery` composed end to end: a GET establishes a session and

@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 /-!
@@ -19,11 +20,11 @@ imports, which would start the frontend at run time and link it in.
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware
 
-def greet : StatelessHandler :=
+def greet : StatelessHandler .std :=
   { onRequest := extract (name ← Extract.field "name") (title ← Extract.field? "title") =>
       fun _ => Response.ok.text s!"hello {title.getD ""} {name}" }
 
@@ -34,5 +35,5 @@ def statusAndBody (response : ByteArray) : String :=
 
 def main : IO Unit := do
   for query in ["/?name=Ada&title=Countess", "/?title=Countess"] do
-    check query (mkGetClose query) (params greet).onRequest fun response =>
+    check query (mkGetClose query) (params {} greet).onRequest fun response =>
       IO.println (statusAndBody response)

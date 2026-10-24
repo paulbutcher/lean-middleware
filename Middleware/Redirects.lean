@@ -11,7 +11,7 @@ public import Middleware.HeaderValue
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -20,6 +20,8 @@ def location : Header.Name := .mk "location"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 /-- Options for `sslRedirect`. -/
 structure SslRedirectOptions where
@@ -33,7 +35,7 @@ target from; an absent `Scheme` is treated as `http`, per `requestOrigin`'s docu
 safe-failure default, so it's only the missing-`Host` case that actually falls through here).
 `GET`/`HEAD` get a cacheable `301`; anything else gets a `307`, which, unlike `301`/`302`,
 preserves the original method and body on the client's follow-up request. -/
-def sslRedirect (options : SslRedirectOptions := {}) : Middleware :=
+def sslRedirect [ServerEngine e] (options : SslRedirectOptions := {}) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -53,14 +55,12 @@ def sslRedirect (options : SslRedirectOptions := {}) : Middleware :=
               else
                 Status.temporaryRedirect
             let headers := Headers.empty.insert Header.Name.location (Header.Value.ofStringSanitized location)
-            pure {
-              line := { status, version := req.line.version, headers },
-              body := Body.Any.ofBody ({} : Body.Empty) } }
+            ServerEngine.empty { line := { status, version := req.line.version, headers } } }
 
 /-- Rewrites a relative `Location` header on a redirect-shaped response (`201`, `301`, `302`,
 `303`, `307`) to an absolute URL, using `requestOrigin`. Left alone if there's no `Location`, it's
 already absolute, or there's no `Host` header to build an origin from. -/
-def absoluteRedirects : Middleware :=
+def absoluteRedirects : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

@@ -19,13 +19,18 @@ jobs:
       # `leancurl`. Building the libraries never reaches it; the test suite does, via
       # `Telemetry.Testing`, so `leancurl`'s `pkg-config --cflags libcurl` has to succeed on both
       # runners, and neither image supplies everything that needs on its own.
-      - name: Install libcurl development files
+      # `test/leanin` runs the middleware on LeanIn, whose socket shim needs `uv.h` and `-luv`.
+      - name: Install libcurl and libuv development files
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libcurl4-openssl-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libcurl4-openssl-dev libuv1-dev
 
-      - name: Install pkg-config
+      - name: Install pkg-config and libuv
         if: runner.os == 'macOS'
-        run: pkg-config --version || brew install pkgconf
+        run: |
+          pkg-config --version || brew install pkgconf
+          brew list libuv || brew install libuv
+          echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       # `lake test` builds and links all three packages, so no per-package build step is needed.
       # `test` is set explicitly rather than left to `auto-config`, whose detection of an
