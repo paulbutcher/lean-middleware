@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.18.0] - 2026-10-24
 
 - Every middleware is generic over `routing`'s `Engine`, so it runs on LeanIn as well as `Std.Http.Server`; write `Middleware .std` where `Middleware` was.
 - `params` refuses a form body over `ParamsOptions.maxBodySize`, 1 MiB by default, with `413`, and one that is not UTF-8 with `400`.
