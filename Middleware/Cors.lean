@@ -25,6 +25,7 @@ def accessControlAllowHeaders : Header.Name := .mk "access-control-allow-headers
 def accessControlAllowCredentials : Header.Name := .mk "access-control-allow-credentials"
 def accessControlExposeHeaders : Header.Name := .mk "access-control-expose-headers"
 def accessControlMaxAge : Header.Name := .mk "access-control-max-age"
+def secFetchSite : Header.Name := .mk "sec-fetch-site"
 
 end Middleware.Header.Name
 
@@ -49,7 +50,10 @@ structure CorsOptions where
   exposeHeaders : List String := []
   maxAge : Option Nat := some 600
   /-- Called with each request whose `Origin` is not allowed, and that origin: a response
-  without allow headers says nothing about why it has none. -/
+  without allow headers says nothing about why it has none. Not called for `Sec-Fetch-Site:
+  same-origin`, since a browser sends `Origin` on its own form posts and applies no CORS to them.
+  An exception it throws goes to the wrapped handler's `onFailure` rather than costing the
+  request its response. -/
   onRefused : Request Body.Stream → String → ContextAsync Unit := fun _ _ => pure ()
 
 /-- What `Access-Control-Allow-Origin` answers to a request's `Origin`, if anything, and whether
@@ -109,7 +113,10 @@ def cors (options : CorsOptions := {}) : Middleware :=
         let origin := (req.line.headers.get? Header.Name.origin).map (·.value)
         let allowed := allowedOrigin options.origins origin
         if let some origin := origin then
-          if allowed.isNone then options.onRefused req origin
+          let sameOrigin :=
+            (req.line.headers.get? Header.Name.secFetchSite).map (·.value) == some "same-origin"
+          if allowed.isNone && !sameOrigin then
+            try options.onRefused req origin catch e => handler.onFailure e
         let isPreflight := origin.isSome && req.line.method == .options &&
           req.line.headers.contains Header.Name.accessControlRequestMethod
         if isPreflight then

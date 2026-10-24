@@ -24,8 +24,8 @@ def reached : StatelessHandler :=
 def varying (value : String) : StatelessHandler :=
   { onRequest := fun _ => Response.ok.header! "Vary" value |>.text "ok" }
 
-def get (origin : String) : String :=
-  mkGet "/" s!"Origin: {origin}\x0d\nConnection: close\x0d\n"
+def get (origin : String) (headers : String := "") : String :=
+  mkGet "/" s!"Origin: {origin}\x0d\n{headers}Connection: close\x0d\n"
 
 def preflight (origin : String) (headers : String := "") : String :=
   s!"OPTIONS / HTTP/1.1\x0d\nHost: example.com\x0d\nOrigin: {origin}\x0d\n" ++
@@ -75,6 +75,26 @@ def refusedTest : IO Unit := do
   let seen ← refused.get
   unless seen == ["https://evil.example", "https://other.example"] do
     throw <| IO.userError s!"expected the two refused origins to be reported, got {seen}"
+
+def sameOriginTest : IO Unit := do
+  let refused ← IO.mkRef ([] : List String)
+  let options := { listed with onRefused := fun _ origin => refused.modify (· ++ [origin]) }
+  for (origin, site) in [("https://own.example", "same-origin"), ("https://sibling.example", "same-site")] do
+    check s!"an unlisted origin under Sec-Fetch-Site: {site} is answered"
+      (get origin s!"Sec-Fetch-Site: {site}\x0d\n") (cors options reached).onRequest fun response =>
+        assertStatus response "HTTP/1.1 200"
+  let seen ← refused.get
+  unless seen == ["https://sibling.example"] do
+    throw <| IO.userError s!"expected only the same-site origin to be reported, got {seen}"
+
+def throwingRefusedTest : IO Unit := do
+  let failed ← IO.mkRef false
+  let handler := { reached with onFailure := fun _ => failed.set true }
+  let options := { listed with onRefused := fun _ _ => throw (IO.userError "boom") }
+  check "an onRefused that throws still lets the request be answered" (get "https://evil.example")
+    (cors options handler).onRequest fun response => assertStatus response "HTTP/1.1 200"
+  unless (← failed.get) do
+    throw <| IO.userError "expected onRefused's exception to reach onFailure"
 
 def preflightTest : IO Unit :=
   check "a preflight is answered without reaching the handler"
@@ -145,6 +165,8 @@ def run : IO Unit :=
     unlistedOriginTest
     credentialsTest
     refusedTest
+    sameOriginTest
+    throwingRefusedTest
     preflightTest
     preflightFixedHeadersTest
     preflightExposeHeadersTest
