@@ -1,6 +1,10 @@
 FROM mcr.microsoft.com/devcontainers/base:resolute
 
-USER vscode
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libuv1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+    USER vscode
 ENV PATH="/home/vscode/.local/bin:/home/vscode/.elan/bin:${PATH}"
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
