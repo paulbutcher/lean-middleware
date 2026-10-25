@@ -11,7 +11,7 @@ public import Middleware.HeaderValue
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.ContentType
 
@@ -51,12 +51,14 @@ end Middleware.ContentType
 
 namespace Middleware
 
+variable {e : Engine}
+
 /--
 Sets the `Content-Type` response header by inferring it from the request path's file
 extension, when the handler hasn't already set one. Falls back to `default` for unknown or
 missing extensions.
 -/
-def contentType (default : String := "application/octet-stream") : Middleware :=
+def contentType (default : String := "application/octet-stream") : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

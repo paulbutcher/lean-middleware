@@ -1,10 +1,10 @@
 # middleware
 
-A middleware library for [`Std.Http.Server`](https://leanprover.github.io).
+A middleware library for [`routing`](https://github.com/paulbutcher/lean-routing)'s engines: `Std.Http.Server` (`.std`) and LeanIn (`.leanin`).
 
 ## Usage
 
-See `Middleware.apply`'s doc comment (`Middleware/Core.lean`) for why the middlewares are ordered as follows.
+Every middleware is generic over the engine it wraps, which is inferred from the handler it is applied to. The examples below serve on `.std`; one serving on LeanIn writes `.leanin` where they write `.std`. See `Middleware.apply`'s doc comment (`Middleware/Core.lean`) for why the middlewares are ordered as follows.
 
 ### An API
 
@@ -13,9 +13,9 @@ import Middleware
 
 open Middleware
 
-def myApi : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "{}" }
+def myApi : StatelessHandler .std := { onRequest := fun _ => Response.ok |>.text "{}" }
 
-def buildSecureApiServer : StatelessHandler :=
+def buildSecureApiServer : StatelessHandler .std :=
   Middleware.apply
     [forwardedScheme Middleware.Header.Name.xForwardedProto,
      forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
@@ -23,7 +23,7 @@ def buildSecureApiServer : StatelessHandler :=
      catchAll,
      sslRedirect,
      params,
-     contentType "application/octet-stream", 
+     contentType "application/octet-stream",
      defaultCharset "utf-8",
      cacheControl .noCache,
      notModified]
@@ -39,26 +39,25 @@ import MiddlewareTracing
 
 open Middleware
 
-def myApp : StatelessHandler := { onRequest := fun _ => Response.ok |>.text "hello" }
+def myApp : StatelessHandler .std := { onRequest := fun _ => Response.ok |>.text "hello" }
 
-def buildSecureSiteServer (sessionStore : CookieStore)
-    (matchedRoute : Extensions → Option String) : StatelessHandler :=
+def buildSecureSiteServer (sessionStore : CookieStore) : StatelessHandler .std :=
   Middleware.apply
     [forwardedScheme Middleware.Header.Name.xForwardedProto,
      forwardedRemoteAddr Middleware.Header.Name.xForwardedFor,
-     hsts, 
+     hsts,
      xFrameOptions .sameOrigin, xContentTypeOptions,
      catchAll,
-     serverSpan matchedRoute {},
+     serverSpan matchedPattern? {},
      sslRedirect,
      cookies,
      session sessionStore
        { cookieName := "secure-ring-session",
          cookieAttrs := { path := some "/", httpOnly := true, secure := true } },
      flash,
-     params, 
+     params,
      multipartParams,
-     antiForgery { safeHeader := some (Std.Http.Header.Name.mk "X-Lean-Anti-Forgery") },
+     antiForgery { safeHeader := some (Std.Http.Header.Name.mk "x-lean-anti-forgery") },
      contentType "application/octet-stream",
      defaultCharset "utf-8",
      cacheControl .noCache,
@@ -69,14 +68,16 @@ def buildSecureSiteServer (sessionStore : CookieStore)
 
 ## Middlewares
 
-A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after the wrapped handler runs (`Middleware/Core.lean`). A stack of middleware composes via `Middleware.apply`, outermost-first.
+A `Middleware e` wraps a `routing` `StatelessHandler e`, adding behavior before and/or after the wrapped handler runs (`Middleware/Core.lean`). A stack of middleware composes via `Middleware.apply`, outermost-first.
+
+Moving from 0.17 to 0.18: require `routing-std`, import `RoutingStd`, and write `Middleware .std`, `StatelessHandler .std`, `Extractor .std`, `AntiForgeryOptions .std` and `ServerSpanOptions .std` where the unparameterised names were. The handler is `routing`'s, which `Std.Http.Server` serves as it is and `StatelessHandler.ofStd` builds from Std's own. `params` now takes options, so `params handler` becomes `params {} handler`; in `apply`'s list it is unchanged. `params` and `multipartParams` refuse a body over their new limits with `413`, and `params` a form body that is not UTF-8 with `400`.
 
 - `catchAll` (`Middleware/CatchAll.lean`): turns an uncaught exception into a `500` response instead of tearing down the connection.
 - `cookies` (`Middleware/Cookies.lean`): parses the `Cookie` request header and writes `Set-Cookie` response headers, with full RFC 6265 attribute support (`Path`, `Domain`, `Max-Age`, `Expires`, `Secure`, `HttpOnly`, `SameSite`).
 - `session` (`Middleware/Session.lean`): server-side sessions keyed by a cookie, backed by a pluggable `SessionStore` typeclass. Two implementations are included: `MemoryStore`, an in-process table, and `CookieStore` (`cookiestore/MiddlewareCookieStore.lean`, in a separate package, see below), which keeps no server-side state at all: the session is AES-256-GCM sealed and the sealed blob itself is the cookie's value. Requires `cookies` wrapped outer.
 - `flash` (`Middleware/Flash.lean`): one-request-lifetime flash messages, layered on `session`. Requires `session` wrapped outer.
-- `params` (`Middleware/Params.lean`): attaches query-string and `application/x-www-form-urlencoded` body parameters as a `Params` extension.
-- `multipartParams` (`Middleware/Multipart.lean`): parses `multipart/form-data` bodies (file uploads and mixed form fields), with size limits and size-threshold spooling to temp files.
+- `params` (`Middleware/Params.lean`): attaches query-string and `application/x-www-form-urlencoded` body parameters as a `Params` extension. A body over `ParamsOptions.maxBodySize` (1 MiB by default) is answered `413`.
+- `multipartParams` (`Middleware/Multipart.lean`): parses `multipart/form-data` bodies (file uploads and mixed form fields), with size limits and size-threshold spooling to temp files. The whole body is read before any part is parsed, so `MultipartOptions.maxBodySize` (16 MiB by default) is what bounds the memory a request can take; raise it, with `maxPartSize`, on an upload route alone rather than across the application.
 - `contentType` (`Middleware/ContentType.lean`): infers a `Content-Type` response header from the request path's file extension, when the handler hasn't already set one.
 - `cacheControl` (`Middleware/CacheControl.lean`): sets a `Cache-Control` freshness policy on any response that doesn't already carry one.
 - `notModified` (`Middleware/NotModified.lean`): downgrades a response to `304 Not Modified` based on `If-None-Match`/`If-Modified-Since` against the response's own `ETag`/`Last-Modified`.
@@ -85,7 +86,7 @@ A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after t
 - `xFrameOptions`, `xContentTypeOptions`, `xXssProtection`, `hsts` (`Middleware/Security.lean`): static browser-security response headers (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Strict-Transport-Security`).
 - `cors` (`Middleware/Cors.lean`): cross-origin resource sharing. Answers preflights itself, adds the allow headers to responses for allowed origins (`*`, a list, or a predicate), sends `Vary: Origin` on every response unless it answers `*`, allows credentials only for an echoed origin, and reports refused origins to `onRefused`.
 - `defaultCharset` (`Middleware/Charset.lean`): appends `; charset=...` to a text-based `Content-Type` that doesn't already declare one.
-- `forwardedScheme`, `forwardedRemoteAddr` (`Middleware/Proxy.lean`): trust `X-Forwarded-Proto`/`X-Forwarded-For` from a reverse proxy, since `Std.Http.Server` has no built-in TLS support and so no native notion of request scheme at all.
+- `forwardedScheme`, `forwardedRemoteAddr` (`Middleware/Proxy.lean`): trust `X-Forwarded-Proto`/`X-Forwarded-For` from a reverse proxy, since the `Std.Http` request every engine shares carries no scheme at all.
 - `sslRedirect`, `absoluteRedirects` (`Middleware/Redirects.lean`): redirect `http` requests to `https` (per `forwardedScheme`), and rewrite relative `Location` headers on redirect responses to absolute ones.
 - `serverSpan` (`tracing/MiddlewareTracing.lean`): opens an OpenTelemetry `server` span around every request.
 - `antiForgery` (`Middleware/AntiForgery.lean`): CSRF protection via a session-backed synchronizer token, checked against a submitted form field, `X-CSRF-Token`, or `X-XSRF-Token` on any non-safe request. Requires `session` wrapped outer.
@@ -94,17 +95,17 @@ A `Middleware` wraps a `StatelessHandler`, adding behavior before and/or after t
 
 A handler reading `(req.extensions.get Params).bind (·.get "title")` gets `none` both when the form was empty and when `params` was never in the stack. The second is a misconfigured server, and it goes unreported.
 
-An `Extractor α` (`Middleware/Extract.lean`) reads an `α` from the request for the handler, or answers the request with the response that ends it. `extract` runs extractors in order, each able to use the ones before it, and the first to refuse answers the request:
+An `Extractor e α` (`Middleware/Extract.lean`) reads an `α` from the request for the handler, or answers the request with the response that ends it. `extract` runs extractors in order, each able to use the ones before it, and the first to refuse answers the request:
 
 ```lean
-def create : StatelessHandler :=
+def create : StatelessHandler .std :=
   { onRequest := extract (_ ← Extract.token) (title ← Extract.field "title") =>
       fun _ => Response.ok.text title }
 ```
 
 `Extract.params`, `Extract.session`, `Extract.token`, `Extract.flash` and `Extract.cookies` refuse with a `500` when the middleware that inserts their extension unconditionally was not in the stack, and `Extract.required` is the general form. `MultipartParams`, `ForwardedFor` and `Scheme` are inserted only when the request warrants one, so absence there says nothing about the stack and they get no extractor. Each takes `missing` to answer with something other than the default `500`. `Extract.field` refuses with a `400` naming a parameter the request lacks; `Extract.field?` answers `none` instead.
 
-`Extractor` is a `Monad`, so an application writes its own as an ordinary value, taking any dependency as an argument: `def account (identity : Identity) : Extractor Account := do ...`.
+`Extractor` is a `Monad`, so an application writes its own as an ordinary value, taking any dependency as an argument: `def account (identity : Identity) : Extractor e Account := do ...`.
 
 Extractors are not middleware; they wrap the innermost handler rather than appearing in `apply`'s list. `extract` is a macro, but reaches nothing from the Lean package at run time, which `lake test` checks.
 
@@ -119,7 +120,7 @@ import MiddlewareAssets
 
 open Middleware
 
-def buildAssetServer (a : Assets) (myApp : StatelessHandler) : StatelessHandler :=
+def buildAssetServer (a : Assets) (myApp : StatelessHandler .std) : StatelessHandler .std :=
   Middleware.apply [contentType "application/octet-stream", assets a] myApp
 
 def stylesheetHref (a : Assets) : Option String := a.path? "css/auth.css"
@@ -146,9 +147,11 @@ def loadUser (req : Request Body.Stream) (id : String) : TelemetryT IO User :=
 
 `ServerSpanOptions` adds `client.address`, `user_agent.original` and, opt-in because a query string can carry credentials, `url.query`. Its `skip` predicate drops a request from tracing altogether, which is worth pointing at static assets to avoid every asset `file` serves becoming its own export.
 
+On LeanIn, which attaches no `RemoteAddr`, `client.address` is recorded only from `forwardedRemoteAddr`.
+
 ## Testing
 
-`Middleware.Test.Browser` (`Middleware/Test/Browser.lean`) drives a stack across several requests the way a browser does, carrying a cookie jar between them:
+`Middleware.Test.Browser` (`Middleware/Test/Browser.lean`) drives a `.std` stack, through `Std.Http`'s mock connection, across several requests the way a browser does, carrying a cookie jar between them:
 
 ```lean
 open Middleware.Test
@@ -181,7 +184,7 @@ It is not imported by `Middleware`, since it pulls in `Std.Http.Test.Helpers`. I
 
 ## Packages
 
-- **`middleware`**: everything apart from `CookieStore`, `serverSpan` and `assets`. Depends on nothing beyond Lean core and Std.
+- **`middleware`**: everything apart from `CookieStore`, `serverSpan` and `assets`. Depends on `routing`'s core package and never on an engine package, so an application resolves only the engine it serves on, by requiring `routing-std` or `routing-leanin` itself.
 - **`middleware-cookiestore`**: `CookieStore` alone, which seals sessions with AES-256-GCM through `lean-libcrypto`, and so needs OpenSSL 3 and `pkg-config` to build.
 - **`middleware-tracing`**: `serverSpan` alone, which needs `telemetry`.
 - **`middleware-assets`**: `Assets` and `assets` alone, which hash with `leancrypto`.

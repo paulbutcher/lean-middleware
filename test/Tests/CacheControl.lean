@@ -6,22 +6,23 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.CacheControl
+public import RoutingStd
 public import Middleware.NotModified
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cacheControl notModified CachePolicy ETag)
 
 namespace Tests.CacheControl
 
-def bareHandler : StatelessHandler :=
+def bareHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "ok" }
 
-def etaggedHandler : StatelessHandler :=
+def etaggedHandler : StatelessHandler .std :=
   { onRequest := fun _ => do
       let resp ← Response.ok |>.text "hello"
       let (name, value) := ETag.serialize { value := "abc123", weak := false }
@@ -46,7 +47,7 @@ def privateMaxAgeTest : IO Unit :=
 
 def handlerPolicyWinsTest : IO Unit :=
   check "leaves a policy the handler chose for itself" (mkGetClose "/")
-    (cacheControl .noCache
+    (cacheControl (e := .std) .noCache
       { onRequest := fun _ => Response.ok.header! "Cache-Control" "no-store" |>.text "ok" }).onRequest
     fun response => do
       assertContains response "Cache-Control: no-store"

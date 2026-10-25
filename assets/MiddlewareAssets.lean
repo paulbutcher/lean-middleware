@@ -13,8 +13,7 @@ public import Leancrypto
 public section
 
 open Std.Http
-open Std.Http.Server
-open Std.Async
+open Routing
 
 namespace Middleware.Assets
 
@@ -117,8 +116,8 @@ the reason this middleware sets the header itself rather than leaving it to `cac
 stack-wide policy has to suit everything else. As with `file`, `Content-Type` is left to
 `contentType` composed outside, which still reads the extension a fingerprinted name keeps.
 -/
-def assets (a : Assets) (policy : CachePolicy := .maxAge 31536000 (immutable := true)) :
-    Middleware :=
+def assets {e : Engine} [ServerEngine e] (a : Assets)
+    (policy : CachePolicy := .maxAge 31536000 (immutable := true)) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -126,13 +125,13 @@ def assets (a : Assets) (policy : CachePolicy := .maxAge 31536000 (immutable := 
         | none => handler.onRequest req
         | some entry =>
           let md ← entry.file.metadata
-          let body ← File.streamFile entry.file md.byteSize.toNat
           let etag : ETag := { value := entry.hash }
           let headers :=
             Headers.empty
               |>.insert (ETag.serialize etag).fst (ETag.serialize etag).snd
               |>.insert Header.Name.cacheControl
                   (Header.Value.ofStringSanitized policy.toWire)
-          pure { line := { status := .ok, headers }, body := Body.Any.ofBody body } }
+          ServerEngine.stream { line := { status := .ok, headers } } none
+            (File.streamFile entry.file md.byteSize.toNat) }
 
 end Middleware

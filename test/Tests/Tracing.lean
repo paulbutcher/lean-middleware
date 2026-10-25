@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.CatchAll
+public import RoutingStd
 public import MiddlewareTracing
 public import Std.Http.Test.Helpers
 public import Telemetry.Testing
@@ -13,7 +14,8 @@ public import Telemetry.Testing
 public section
 
 open Std.Http
-open Std.Http.Server
+open Std.Http.Server (RemoteAddr)
+open Routing
 open Std.Http.Internal.Test
 open Std.Async
 open Telemetry
@@ -33,7 +35,7 @@ def matchedRoute (extensions : Extensions) : Option String :=
 /-- A router just big enough to have a route template distinct from the paths that match it:
 `/users/{id}` for any two-segment path under `/users`, and nothing else. Like a real router it
 reports what it matched on the *response*, which is the only channel travelling back outwards. -/
-def router : Middleware := fun handler =>
+def router : Middleware .std := fun handler =>
   { handler with
     onRequest := fun req => do
       let response ← handler.onRequest req
@@ -45,7 +47,7 @@ def router : Middleware := fun handler =>
 
 /-- Records the exception a layer below raised and answers with a `500`, the way `catchAll` sits
 outside `serverSpan` in the recommended order. -/
-def recordingCatchAll (seen : IO.Ref (Option String)) : Middleware := fun handler =>
+def recordingCatchAll (seen : IO.Ref (Option String)) : Middleware .std := fun handler =>
   { handler with
     onRequest := fun req => do
       try
@@ -54,13 +56,13 @@ def recordingCatchAll (seen : IO.Ref (Option String)) : Middleware := fun handle
         seen.set (some (toString e))
         Response.internalServerError.text "caught" }
 
-def okHandler : StatelessHandler :=
+def okHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "ok" }
 
-def statusHandler (status : Status) : StatelessHandler :=
+def statusHandler (status : Status) : StatelessHandler .std :=
   { onRequest := fun _ => Response.withStatus status |>.text "" }
 
-def throwingHandler (message : String) : StatelessHandler :=
+def throwingHandler (message : String) : StatelessHandler .std :=
   { onRequest := fun _ => throw (IO.Error.userError message) }
 
 def attr? (span : SpanData) (key : String) : Option Value :=
@@ -77,7 +79,7 @@ def theSpan (captured : Telemetry.Testing.Captured) : IO SpanData := do
 
 /-- `Telemetry.Testing.capture` installs process-globally, so these run one at a time; `Main`
 runs the whole suite sequentially. -/
-def captureRequests (raws : List String) (handler : StatelessHandler) :
+def captureRequests (raws : List String) (handler : StatelessHandler .std) :
     IO Telemetry.Testing.Captured := do
   let (_, captured) ← Telemetry.Testing.capture do
     for raw in raws do
@@ -131,7 +133,7 @@ def exceptionIsRecordedAndRethrownTest : IO Unit := do
 this span's context: without that nothing below can open a child of the server span. -/
 def spanContextReachesTheHandlerTest : IO Unit := do
   let observed ← IO.mkRef none
-  let handler : StatelessHandler :=
+  let handler : StatelessHandler .std :=
     { onRequest := fun req => do
         observed.set (parentSpan req)
         Response.ok |>.text "ok" }
@@ -170,7 +172,7 @@ def queryRecordedOnlyOnRequestTest : IO Unit := do
 /-- A skipped request opens no span at all, which is the only way to keep an exporter from
 seeing one export per static asset while `Telemetry` implements no sampling. -/
 def skippedRequestsProduceNoSpanTest : IO Unit := do
-  let options : ServerSpanOptions :=
+  let options : ServerSpanOptions .std :=
     { skip := fun req => req.line.uri.path.toDecodedSegments.toList.head? == some "assets" }
   let stack := serverSpan matchedRoute options (router okHandler)
   let captured ← captureRequests [mkGetClose "/assets/app.css", mkGetClose "/users/1"] stack
@@ -179,7 +181,7 @@ def skippedRequestsProduceNoSpanTest : IO Unit := do
 
 /-- Attaches `value` to every request, standing in for whatever normally supplies it: the server
 itself for `RemoteAddr`, `forwardedRemoteAddr` for `ForwardedFor`. -/
-def withExtension [TypeName α] (value : α) : Middleware := fun handler =>
+def withExtension [TypeName α] (value : α) : Middleware .std := fun handler =>
   { handler with
     onRequest := fun req =>
       handler.onRequest { req with extensions := req.extensions.insert value } }
@@ -198,7 +200,7 @@ def clientAddress? (span : SpanData) : Option Value :=
 def clientPort? (span : SpanData) : Option Value :=
   attr? span Middleware.Conventions.clientPort
 
-def tracedSpan [TypeName α] (value : α) (options : ServerSpanOptions := {}) : IO SpanData := do
+def tracedSpan [TypeName α] (value : α) (options : ServerSpanOptions .std := {}) : IO SpanData := do
   theSpan (← captureRequests [mkGetClose "/users/1"]
     (withExtension value (serverSpan matchedRoute options (router okHandler))))
 

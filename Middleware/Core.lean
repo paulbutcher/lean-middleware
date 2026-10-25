@@ -5,31 +5,33 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 module
 
-public import Std.Http.Server
+public import Routing.ServerEngine
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 /--
-A function that wraps a `StatelessHandler`, adding behavior before and/or after the wrapped
-handler runs. Composes via ordinary function composition.
+A function that wraps a `StatelessHandler` on engine `e`, adding behavior before and/or after the
+wrapped handler runs. Composes via ordinary function composition.
 -/
-abbrev Middleware := StatelessHandler → StatelessHandler
+abbrev Middleware (e : Engine) := StatelessHandler e → StatelessHandler e
 
 namespace Middleware
 
+variable {e : Engine}
+
 /-- Leaves the handler unchanged. -/
-@[expose] def id : Middleware := fun handler => handler
+@[expose] def id : Middleware e := fun handler => handler
 
 /-- Answers a request that reached a middleware whose prerequisite layer wasn't in the stack.
 `500`, because the request is fine and the server is not. The body names both layers: nothing
 else about the response distinguishes a misconfigured stack from an ordinary empty result, so
 without it the mistake is only visible as behaviour that quietly never works. -/
-def missingLayer (required dependent : String) : StatelessHandler :=
+def missingLayer (required dependent : String) : StatelessHandler e :=
   { onRequest := fun _ =>
-      Response.internalServerError.text
+      e.text Response.internalServerError
         s!"`{dependent}` requires `{required}` wrapped outer, which this stack does not have" }
 
 /--
@@ -115,7 +117,7 @@ convention:
 An application that only uses some of these middlewares can drop the rest from the list; the
 relative order among what's left still holds.
 -/
-@[expose] def apply (mws : List Middleware) (base : StatelessHandler) : StatelessHandler :=
+@[expose] def apply (mws : List (Middleware e)) (base : StatelessHandler e) : StatelessHandler e :=
   mws.foldr (fun mw acc => mw acc) base
 
 end Middleware

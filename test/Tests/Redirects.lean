@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Redirects
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (sslRedirect absoluteRedirects forwardedScheme SslRedirectOptions)
 
@@ -22,10 +23,10 @@ namespace Tests.Redirects
 -- before it ever reaches middleware (confirmed empirically, matching RFC 7230's requirement),
 -- so that branch is unreachable through the real request-parsing path this test harness drives.
 
-def bareHandler : StatelessHandler :=
+def bareHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "reached-inner" }
 
-def redirectHandler (status : Status) (location : String) : StatelessHandler :=
+def redirectHandler (status : Status) (location : String) : StatelessHandler .std :=
   { onRequest := fun _ =>
       pure {
         line := {

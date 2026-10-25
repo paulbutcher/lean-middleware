@@ -23,6 +23,9 @@ require «middleware-tracing» from "../tracing"
 
 require «middleware-assets» from "../assets"
 
+require «routing-std» from git
+  "https://github.com/paulbutcher/lean-routing" @ "v0.15.1" / "std"
+
 require plausible from git
   "https://github.com/leanprover-community/plausible" @ "v4.34.0"
 

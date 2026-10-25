@@ -13,7 +13,7 @@ public import Std.Time
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -25,6 +25,8 @@ def ifModifiedSince : Header.Name := .mk "if-modified-since"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 /-- An HTTP entity tag (RFC 9110 §8.8.3): an opaque validator, optionally weak. -/
 structure ETag where
@@ -150,7 +152,7 @@ The `304` carries the original response's `ETag`/`Last-Modified` and its
 response, so a freshness policy left off the `304` is one the client can never be told has
 changed, and `cacheControl` would only reach a client that had nothing cached yet.
 -/
-def notModified : Middleware :=
+def notModified [ServerEngine e] : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -180,9 +182,8 @@ def notModified : Middleware :=
           for name in [Header.Name.cacheControl, Header.Name.vary, Header.Name.expires] do
             if let some values := resp.line.headers.getAll? name then
               headers := headers.insertMany name values
-          pure {
-            line := { status := .notModified, version := resp.line.version, headers },
-            body := Body.Any.ofBody ({} : Body.Empty) }
+          ServerEngine.empty
+            { line := { status := .notModified, version := resp.line.version, headers } }
         else
           pure resp }
 

@@ -10,9 +10,8 @@ public import Middleware.HeaderValue
 
 public section
 
-open Std.Async
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -31,6 +30,8 @@ end Middleware.Header.Name
 
 namespace Middleware
 
+variable {e : Engine}
+
 /-- Which origins may read responses. `any` answers `*`, which browsers refuse to pair with
 credentials, so only the constructors that echo an origin can allow them. -/
 inductive AllowedOrigins where
@@ -43,7 +44,7 @@ inductive AllowedHeaders where
   | reflect
   | only (names : List String)
 
-structure CorsOptions where
+structure CorsOptions (e : Engine) where
   origins : AllowedOrigins := .any
   methods : List Method := [.get, .head, .post, .put, .patch, .delete]
   allowHeaders : AllowedHeaders := .reflect
@@ -54,7 +55,7 @@ structure CorsOptions where
   same-origin`, since a browser sends `Origin` on its own form posts and applies no CORS to them.
   An exception it throws goes to the wrapped handler's `onFailure` rather than costing the
   request its response. -/
-  onRefused : Request Body.Stream → String → ContextAsync Unit := fun _ _ => pure ()
+  onRefused : Request e.ReqBody → String → e.M Unit := fun _ _ => pure ()
 
 /-- What `Access-Control-Allow-Origin` answers to a request's `Origin`, if anything, and whether
 credentials go with it. `*` goes on every response, `Origin` or not, since a stored response
@@ -86,7 +87,7 @@ private def varyOnOrigin : AllowedOrigins → Headers → Headers
     if covered then headers
     else headers.insert Header.Name.vary (Header.Value.ofStringSanitized "Origin")
 
-private def preflightHeaders (options : CorsOptions) (requested : Option String)
+private def preflightHeaders (options : CorsOptions e) (requested : Option String)
     (headers : Headers) : Headers :=
   let headers := setHeader headers Header.Name.accessControlAllowMethods
     (", ".intercalate (options.methods.map toString))
@@ -106,7 +107,7 @@ A preflight, an `OPTIONS` carrying an `Origin` and naming the method it will use
 succeeds on any path, routed or not. Any other request reaches the handler, and its response
 gains the allow headers if its origin is allowed; one from an origin that is not gains none,
 which is how a browser learns to withhold it. -/
-def cors (options : CorsOptions := {}) : Middleware :=
+def cors [ServerEngine e] (options : CorsOptions e := {}) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -116,7 +117,7 @@ def cors (options : CorsOptions := {}) : Middleware :=
           let sameOrigin :=
             (req.line.headers.get? Header.Name.secFetchSite).map (·.value) == some "same-origin"
           if allowed.isNone && !sameOrigin then
-            try options.onRefused req origin catch e => handler.onFailure e
+            try options.onRefused req origin catch err => handler.onFailure err
         let isPreflight := origin.isSome && req.line.method == .options &&
           req.line.headers.contains Header.Name.accessControlRequestMethod
         if isPreflight then
@@ -124,10 +125,8 @@ def cors (options : CorsOptions := {}) : Middleware :=
           let headers := match allowed with
             | some allowed => preflightHeaders options requested (allowOrigin Headers.empty allowed)
             | none => Headers.empty
-          pure {
-            line := { status := .noContent, version := req.line.version,
-                      headers := varyOnOrigin options.origins headers },
-            body := Body.Any.ofBody ({} : Body.Empty) }
+          ServerEngine.empty { line := { status := .noContent, version := req.line.version,
+                                         headers := varyOnOrigin options.origins headers } }
         else
           let resp ← handler.onRequest req
           let headers := match allowed with

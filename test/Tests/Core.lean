@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Core
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 
 namespace Tests.Core
@@ -28,7 +29,7 @@ Equality here is of `StatelessHandler` values, not of observed responses, so the
 the two groupings build the same handler rather than merely two handlers that happen to agree on
 the requests a test tries.
 -/
-theorem apply_append (mws₁ mws₂ : List Middleware) (base : StatelessHandler) :
+theorem apply_append {e : Engine} (mws₁ mws₂ : List (Middleware e)) (base : StatelessHandler e) :
     Middleware.apply (mws₁ ++ mws₂) base = Middleware.apply mws₁ (Middleware.apply mws₂ base) := by
   simp [Middleware.apply]
 
@@ -40,7 +41,7 @@ and ends up adding nothing gets back exactly the handler it started with, so the
 For any base handler, `Middleware.apply []` returns that same handler. The proof is `rfl`, so the
 two are equal by unfolding alone, which is the strongest form the claim admits.
 -/
-theorem apply_nil (base : StatelessHandler) : Middleware.apply [] base = base := rfl
+theorem apply_nil {e : Engine} (base : StatelessHandler e) : Middleware.apply [] base = base := rfl
 
 /--
 `Middleware.id` can sit anywhere in a stack without changing what that stack does, so it is
@@ -51,11 +52,11 @@ For any middleware list `mws` and base handler, putting `Middleware.id` at the h
 yields the same handler as leaving it out. Combined with `apply_append`, which lets the list be
 cut at any point, this covers `id` at any position, not just the head.
 -/
-theorem apply_id_cons (mws : List Middleware) (base : StatelessHandler) :
+theorem apply_id_cons {e : Engine} (mws : List (Middleware e)) (base : StatelessHandler e) :
     Middleware.apply (Middleware.id :: mws) base = Middleware.apply mws base := rfl
 
 /-- Adds an `x-order` header on the way back out, recording when this layer ran. -/
-def markerMiddleware (name : String) : Middleware :=
+def markerMiddleware (name : String) : Middleware .std :=
   fun handler =>
     { handler with
       onRequest := fun req => do

@@ -8,14 +8,14 @@ import Lake
 open Lake DSL
 
 /--
-`serverSpan` is the only middleware needing anything beyond `Std.Http.Server`, and Lake resolves
+`serverSpan` is the only middleware needing `telemetry`, and Lake resolves
 `require` package-wide: `telemetry` declared in `middleware` would put `telemetry` and its own
 `leancurl` requirement into the manifest of every application using any middleware at all.
 Keeping it here is what makes tracing opt-in.
 -/
 package «middleware-tracing» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.17.1"
+  version := v!"0.18.0"
 
 require middleware from ".."
 

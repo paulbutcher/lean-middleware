@@ -100,7 +100,7 @@ defeat the point: a page that stopped rendering its token would still pass every
 this.
 -/
 def Browser.new (handler : TestHandler)
-    (paramName : String := ({} : AntiForgeryOptions).paramName)
+    (paramName : String := defaultAntiForgeryParamName)
     (tokenFrom : String → Option String := tokenAfter s!"name=\"{paramName}\" value=\"") :
     IO Browser :=
   return { handler, paramName, tokenFrom, cookies := ← IO.mkRef [],

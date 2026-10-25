@@ -7,21 +7,22 @@ module
 
 public import Middleware.Cors
 public import Middleware.CatchAll
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cors catchAll CorsOptions AllowedOrigins)
 
 namespace Tests.Cors
 
-def reached : StatelessHandler :=
+def reached : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "reached the handler" }
 
-def varying (value : String) : StatelessHandler :=
+def varying (value : String) : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok.header! "Vary" value |>.text "ok" }
 
 def get (origin : String) (headers : String := "") : String :=
@@ -31,7 +32,7 @@ def preflight (origin : String) (headers : String := "") : String :=
   s!"OPTIONS / HTTP/1.1\x0d\nHost: example.com\x0d\nOrigin: {origin}\x0d\n" ++
     s!"Access-Control-Request-Method: PUT\x0d\n{headers}Connection: close\x0d\n\x0d\n"
 
-def listed : CorsOptions := { origins := .list ["https://app.example"] }
+def listed : CorsOptions .std := { origins := .list ["https://app.example"] }
 
 def noOriginTest : IO Unit :=
   check "a request without Origin gets no allow headers, but still varies on Origin"
@@ -138,7 +139,7 @@ def exposeHeadersTest : IO Unit :=
       assertContains response "Access-Control-Expose-Headers: x-total-count"
 
 def failureTest : IO Unit :=
-  let failing : StatelessHandler := { onRequest := fun _ => throw (IO.Error.userError "boom") }
+  let failing : StatelessHandler .std := { onRequest := fun _ => throw (IO.Error.userError "boom") }
   check "a handler failure still carries the allow headers" (get "https://app.example")
     (Middleware.apply [cors listed, catchAll] failing).onRequest fun response => do
       assertStatus response "HTTP/1.1 500"

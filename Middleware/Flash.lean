@@ -10,9 +10,11 @@ public import Middleware.Session
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware
+
+variable {e : Engine}
 
 private def flashKey : String := "__flash"
 
@@ -41,7 +43,7 @@ again on the *next* request too, and the one after that, until some request's re
 performs a session write. A handler that wants "delivered exactly once" needs to persist the
 (already-stripped) `SessionData` it received, e.g. via `SessionUpdate.write sessionData.data`,
 even when it has nothing else to change. -/
-def flash : Middleware :=
+def flash : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

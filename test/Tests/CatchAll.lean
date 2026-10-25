@@ -6,22 +6,23 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.CatchAll
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Std.Async
 open Middleware (catchAll)
 
 namespace Tests.CatchAll
 
-def throwingHandler : StatelessHandler :=
+def throwingHandler : StatelessHandler .std :=
   { onRequest := fun _ => throw (IO.Error.userError "boom") }
 
-def passthroughHandler : StatelessHandler :=
+def passthroughHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "ok" }
 
 def caughtErrorTest : IO Unit :=
@@ -48,11 +49,11 @@ report, so wrapping must leave the field alone in both directions: `catchAll` re
 it, and the server reads the one it returns. A wrapper that replaced or dropped the field would
 silence exactly the reporting the middleware exists to enable.
 
-For any handler, the `onFailure` field of `catchAll handler` is the very same field the wrapped
-handler carries. The proof is `rfl`, so this is definitional rather than a coincidence of the
+For any engine `e` and any handler on it, the `onFailure` field of `catchAll handler` is the very
+same field the wrapped handler carries. The proof is `rfl`, so this is definitional rather than a coincidence of the
 current implementation of `catchAll`'s `onRequest`.
 -/
-theorem catchAll_preserves_onFailure (handler : StatelessHandler) :
+theorem catchAll_preserves_onFailure {e : Engine} [ServerEngine e] (handler : StatelessHandler e) :
     (catchAll handler).onFailure = handler.onFailure := rfl
 
 /-- Whatever the thrown message says, the response is always exactly `500` with the fixed body
@@ -64,7 +65,7 @@ def errorMessageNeverLeaksTest : IO Unit := do
     [ "", "boom", String.ofList (List.replicate 5000 'x'), "Internal Server Error",
       "{\"secret\": \"leaked\"}", "unicode: 日本語 ✅", "line1\nline2\ttabbed" ]
   for msg in messages do
-    let handler : StatelessHandler := { onRequest := fun _ => throw (IO.Error.userError msg) }
+    let handler : StatelessHandler .std := { onRequest := fun _ => throw (IO.Error.userError msg) }
     check s!"thrown message {msg.quote} never leaks" (mkGetClose)
       (catchAll handler).onRequest fun response => do
         assertStatus response "HTTP/1.1 500"

@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import MiddlewareCookieStore
+public import RoutingStd
 public import Middleware.Cookies
 public import Std.Http.Test.Helpers
 public import Plausible
@@ -13,7 +14,7 @@ public import Plausible
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cookies session CookieStore SessionData SessionUpdate Session)
 open Middleware.CookieStore (serialize deserialize)
@@ -28,20 +29,20 @@ def extractCookieValue (response : ByteArray) (name : String) : Option String :=
   | none => none
   | some line => some ((line.drop prefix_.length).toString.splitOn ";" |>.headD "")
 
-def writeSessionHandler : StatelessHandler :=
+def writeSessionHandler : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok |>.extension (SessionUpdate.write [("user", "alice")]) |>.text "written" }
 
-def readSessionHandler : StatelessHandler :=
+def readSessionHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let data := (req.extensions.get SessionData).getD {} |>.data
       Response.ok |>.text (data.get "user" |>.getD "<missing>") }
 
-def deleteSessionHandler : StatelessHandler :=
+def deleteSessionHandler : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok |>.extension SessionUpdate.delete |>.text "deleted" }
 
-def noopHandler : StatelessHandler :=
+def noopHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "noop" }
 
 /-- Unlike `MemoryStore`, there's no server-side table to keep the `session` middleware itself

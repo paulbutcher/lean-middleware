@@ -12,7 +12,7 @@ public import Std.Time
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -22,6 +22,8 @@ def setCookie : Header.Name := .mk "set-cookie"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 /-- `Set-Cookie`'s `SameSite` attribute. A post-RFC-6265 addition (RFC 6265bis / CHIPS); the
 base RFC's `extension-av` grammar already accommodates it even though it doesn't name it. -/
@@ -148,7 +150,7 @@ deriving TypeName
 there. `Extensions.insert` replaces same-type values wholesale, so this reads the existing list
 first rather than clobbering it; lets `session`/`flash`/the application handler each
 contribute a cookie without knowing about each other. -/
-def appendSetCookie (resp : Response Body.Any) (c : SetCookie) : Response Body.Any :=
+def appendSetCookie {α : Type} (resp : Response α) (c : SetCookie) : Response α :=
   let existing := (resp.extensions.get SetCookies).getD {}
   { resp with extensions := resp.extensions.insert ({ existing with
       cookies := existing.cookies ++ [c] } : SetCookies) }
@@ -173,7 +175,7 @@ def parseCookieHeader (s : String) : List (String × String) :=
 `SetCookies` accumulated on the response (see `appendSetCookie`) into `Set-Cookie` headers,
 one header line per cookie (never comma-folded: RFC 6265 forbids it, since `Expires` values
 themselves contain commas). -/
-def cookies : Middleware :=
+def cookies : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

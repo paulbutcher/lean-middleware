@@ -12,7 +12,7 @@ public import Middleware.Multipart
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware.Header.Name
 
@@ -22,6 +22,8 @@ def xXsrfToken : Header.Name := .mk "x-xsrf-token"
 end Middleware.Header.Name
 
 namespace Middleware
+
+variable {e : Engine}
 
 private def antiForgeryKey : String := "__anti-forgery-token"
 
@@ -45,15 +47,19 @@ private def constantTimeEq (a b : ByteArray) : Bool :=
     diff == 0
 
 /-- Returns `403` with a plain HTML body; `AntiForgeryOptions.errorHandler`'s default. -/
-def defaultAntiForgeryErrorHandler : StatelessHandler :=
-  { onRequest := fun _ => Response.forbidden.html "<h1>Invalid anti-forgery token</h1>" }
+def defaultAntiForgeryErrorHandler [ServerEngine e] : StatelessHandler e :=
+  { onRequest := fun _ =>
+      ServerEngine.html Response.forbidden "<h1>Invalid anti-forgery token</h1>" }
+
+/-- `AntiForgeryOptions.paramName`'s default, for a client that has to post to it. -/
+def defaultAntiForgeryParamName : String := "__anti-forgery-token"
 
 /-- Options for `antiForgery`. -/
-structure AntiForgeryOptions where
+structure AntiForgeryOptions (e : Engine) [ServerEngine e] where
   /-- The form/multipart field name a submitted token is read from. -/
-  paramName : String := "__anti-forgery-token"
+  paramName : String := defaultAntiForgeryParamName
   /-- Called in place of the inner handler when the token is missing or wrong. -/
-  errorHandler : StatelessHandler := defaultAntiForgeryErrorHandler
+  errorHandler : StatelessHandler e := defaultAntiForgeryErrorHandler
   /-- If set, a request carrying this header (present and non-blank) is treated as safe without
   needing a valid token at all, e.g. same-origin fetch/XHR code that already sets a custom
   header, something a cross-origin attacker's form or script can't forge under the browser's
@@ -66,7 +72,7 @@ private def isSafeMethod (method : Method) : Bool :=
 /-- Reads a submitted token from (in order): the form-urlencoded `Params` field, a `.bytes`-backed
 `MultipartParams` field (a `.tempFile`-backed one can't sensibly hold a form token), the
 `X-CSRF-Token` header, then the `X-XSRF-Token` header. -/
-private def requestToken (req : Request Body.Stream) (paramName : String) : Option String :=
+private def requestToken {α : Type} (req : Request α) (paramName : String) : Option String :=
   ((req.extensions.get Params).bind (·.form.get paramName))
   |>.orElse (fun _ => (req.extensions.get MultipartParams).bind (·.get paramName)
     |>.bind (fun part => match part.content with
@@ -86,7 +92,7 @@ strategy. Requires `session` wrapped outer to have anything to check against; if
 it isn't, every non-safe request fails validation (no stored token can ever be produced to match
 against), i.e. this middleware **fails closed** without `session`; the opposite default from
 every other middleware's graceful degradation, and deliberately so here. -/
-def antiForgery (options : AntiForgeryOptions := {}) : Middleware :=
+def antiForgery [ServerEngine e] (options : AntiForgeryOptions e := {}) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do

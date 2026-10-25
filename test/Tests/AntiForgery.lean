@@ -6,12 +6,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.AntiForgery
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cookies session params MemoryStore antiForgery AntiForgeryToken
   AntiForgeryOptions)
@@ -31,15 +32,15 @@ def extractCookieValue (response : ByteArray) (name : String) : Option String :=
 def mkRequest (method path : String) (extra : String := "") : String :=
   s!"{method} {path} HTTP/1.1\x0d\nHost: example.com\x0d\n{extra}\x0d\n"
 
-def bareHandler : StatelessHandler :=
+def bareHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.text "reached-inner" }
 
-def echoTokenHandler : StatelessHandler :=
+def echoTokenHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let token := (req.extensions.get AntiForgeryToken).map (·.value) |>.getD "<missing>"
       Response.ok |>.text token }
 
-def jsonErrorHandler : StatelessHandler :=
+def jsonErrorHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.forbidden.json "{\"error\":\"forbidden\"}" }
 
 def safeMethodsPassWithoutSessionTest : IO Unit := do
@@ -86,7 +87,7 @@ def postWithMatchingFormTokenSucceedsTest : IO Unit := do
   check "a POST with the token in a form field succeeds through to the inner handler"
     (mkPost "/" s!"__anti-forgery-token={token}"
       s!"Content-Type: application/x-www-form-urlencoded\x0d\nCookie: lean-session={sid}\x0d\nConnection: close\x0d\n")
-    (cookies (session store {} (params (antiForgery {} bareHandler)))).onRequest fun response =>
+    (cookies (session store {} (params {} (antiForgery {} bareHandler)))).onRequest fun response =>
       assertContains response "reached-inner"
 
 def postWithCsrfHeaderTokenSucceedsTest : IO Unit := do
@@ -128,25 +129,25 @@ def postWithShortWrongTokenRejectedTest : IO Unit := do
 def safeHeaderBypassesValidationTest : IO Unit :=
   check "a configured safeHeader, present and non-blank, bypasses validation entirely"
     (mkPost "/" "" "X-Requested-With: xhr\x0d\nConnection: close\x0d\n")
-    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions)
+    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions .std)
       bareHandler).onRequest fun response => assertContains response "reached-inner"
 
 def missingSafeHeaderStillRejectedTest : IO Unit :=
   check "without that header present, the same request is still rejected"
     (mkPost "/" "" "Connection: close\x0d\n")
-    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions)
+    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions .std)
       bareHandler).onRequest fun response => assertStatus response "HTTP/1.1 403"
 
 def blankSafeHeaderStillRejectedTest : IO Unit :=
   check "a present but blank safeHeader value doesn't count as safe"
     (mkPost "/" "" "X-Requested-With: \x0d\nConnection: close\x0d\n")
-    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions)
+    (antiForgery ({ safeHeader := some (Header.Name.mk "x-requested-with") } : AntiForgeryOptions .std)
       bareHandler).onRequest fun response => assertStatus response "HTTP/1.1 403"
 
 def customErrorHandlerTest : IO Unit :=
   check "a custom errorHandler replaces the default HTML 403"
     (mkPost "/" "" "Connection: close\x0d\n")
-    (antiForgery ({ errorHandler := jsonErrorHandler } : AntiForgeryOptions) bareHandler).onRequest
+    (antiForgery ({ errorHandler := jsonErrorHandler } : AntiForgeryOptions .std) bareHandler).onRequest
     fun response => do
       assertStatus response "HTTP/1.1 403"
       assertContains response "\"error\":\"forbidden\""

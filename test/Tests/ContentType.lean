@@ -6,21 +6,22 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.ContentType
+public import RoutingStd
 public import Std.Http.Test.Helpers
 
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (contentType)
 
 namespace Tests.ContentType
 
-def bareHandler : StatelessHandler :=
+def bareHandler : StatelessHandler .std :=
   { onRequest := fun _ => pure ({ body := Body.Any.ofBody ({} : Body.Empty) } : Response Body.Any) }
 
-def jsonHandler : StatelessHandler :=
+def jsonHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.ok |>.json "{}" }
 
 def inferredFromExtensionTest : IO Unit :=
@@ -44,7 +45,7 @@ def doesNotOverrideExistingTest : IO Unit :=
       assertContains response "Content-Type: application/json"
       assertAbsent response "text/plain"
 
-def presetContentTypeHandler (value : String) : StatelessHandler :=
+def presetContentTypeHandler (value : String) : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok.header Header.Name.contentType (Header.Value.ofString! value) |>.text "body" }
 

@@ -22,8 +22,9 @@ exe=test/.lake/build/bin/leanFree
 status=0
 
 # `grep -c` rather than `grep -q`: `-q` stops at the first match and so kills the process feeding
-# it, which under `pipefail` reads as "found nothing".
-frontend_hits() { grep -c 'l_Lean_Elab\|initialize_Lean_' || true; }
+# it, which under `pipefail` reads as "found nothing". Module initialisers name the package;
+# ordinary symbols name only the namespace, and core `Init` declares things in `Lean.Elab` too.
+frontend_hits() { grep -c 'initialize_Lean_' || true; }
 
 # 1. No compiled module of the library starts a Lean module at run time. A `meta import` starts
 #    one only from the meta initialiser, which runs during elaboration.

@@ -11,8 +11,7 @@ public import Middleware.NotModified
 public section
 
 open Std.Http
-open Std.Http.Server
-open Std.Async
+open Routing
 
 namespace Middleware.File
 
@@ -59,34 +58,35 @@ def isContainedIn (root target : System.FilePath) : IO Bool := do
   return realRoot.toString.isPrefixOf realTarget.toString
 
 /--
-Streams a file's contents in `chunkSize`-byte pieces without buffering the whole file in memory.
-`size` is the file's length as the caller measured it; a file that has grown since is truncated,
-at the first chunk boundary at or past `size`.
+Sends a file's contents to `send` in `chunkSize`-byte pieces without buffering the whole file in
+memory. It is a `write` for `ServerEngine.stream`, which runs it only once the body is being sent,
+so the file is opened here rather than by the caller. `size` is the file's length as the caller
+measured it; a file that has grown since is truncated, at the first chunk boundary at or past
+`size`.
 
 `size` is also what bounds the read loop, and the bound is not arbitrary: every non-empty read
 returns at least one byte, so reading a file of the measured length takes at most `size`
 iterations. The `+ 1` leaves room for the read that observes EOF, which is what ends the loop in
 the ordinary case; the count only stops a file that has outgrown the size it was measured at.
 -/
-def streamFile (path : System.FilePath) (size : Nat) (chunkSize : UInt64 := 65536) :
-    Async Body.Stream :=
-  Body.stream fun s => do
-    let handle ← IO.FS.Handle.mk path .read
-    let rec loop (remaining : Nat) : Async Unit := do
-      match remaining with
-      | 0 => pure ()
-      | n + 1 =>
-        let bytes ← handle.read chunkSize.toUSize
-        if h : bytes.isEmpty then
-          pure ()
-        else do
-          s.send (Chunk.ofByteArray bytes)
-          loop (n + 1 - bytes.size)
-    termination_by remaining
-    decreasing_by
-      simp only [ByteArray.isEmpty, beq_iff_eq] at h
-      omega
-    loop (size + 1)
+def streamFile {e : Engine} [ServerEngine e] (path : System.FilePath) (size : Nat)
+    (chunkSize : UInt64 := 65536) (send : ByteArray → e.M Unit) : e.M Unit := do
+  let handle ← IO.FS.Handle.mk path .read
+  let rec loop (remaining : Nat) : e.M Unit := do
+    match remaining with
+    | 0 => pure ()
+    | n + 1 =>
+      let bytes ← handle.read chunkSize.toUSize
+      if h : bytes.isEmpty then
+        pure ()
+      else do
+        send bytes
+        loop (n + 1 - bytes.size)
+  termination_by remaining
+  decreasing_by
+    simp only [ByteArray.isEmpty, beq_iff_eq] at h
+    omega
+  loop (size + 1)
 
 /-- A weak ETag derived from a file's modification time and size (no content hash is available
 in this toolchain; this is the same fallback most static file servers use). -/
@@ -107,23 +107,24 @@ namespace Middleware
 Serves static files from `root`. On each request: resolves the path (rejecting traversal
 attempts, see `Middleware.File.joinSafeSegments`); if it doesn't resolve, doesn't exist, or is a
 directory, falls through to the inner handler (this middleware doesn't own 404 handling).
-Otherwise streams the file with `Last-Modified` and a weak `ETag` set
-from its metadata.
+Otherwise streams the file with `Last-Modified` and a weak `ETag` set from its metadata. It is
+sent chunked, declaring no length, because a file that shrank between being measured and being
+sent would fall short of a declared one.
 
 Deliberately does not set `Content-Type` itself; compose `contentType` outside it
 (`[contentType, notModified, file root]`) to reuse the existing extension-lookup table instead of
 duplicating it.
 -/
-def file (root : System.FilePath) : Middleware :=
+def file {e : Engine} [ServerEngine e] (root : System.FilePath) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
         match File.resolvePath root req.line.uri.path with
         | none => handler.onRequest req
         | some path =>
-          if !(← path.pathExists) then
+          if !(← (path.pathExists : IO Bool)) then
             handler.onRequest req
-          else if (← path.isDir) then
+          else if (← (path.isDir : IO Bool)) then
             handler.onRequest req
           else if !(← File.isContainedIn root path) then
             handler.onRequest req
@@ -131,11 +132,11 @@ def file (root : System.FilePath) : Middleware :=
             let md ← path.metadata
             let etag := File.weakETagOf md
             let lastModified := File.lastModifiedOf md
-            let body ← File.streamFile path md.byteSize.toNat
             let headers :=
               Headers.empty
                 |>.insert (ETag.serialize etag).fst (ETag.serialize etag).snd
                 |>.insert (LastModified.serialize lastModified).fst (LastModified.serialize lastModified).snd
-            pure { line := { status := .ok, headers }, body := Body.Any.ofBody body } }
+            ServerEngine.stream { line := { status := .ok, headers } } none
+              (File.streamFile path md.byteSize.toNat) }
 
 end Middleware

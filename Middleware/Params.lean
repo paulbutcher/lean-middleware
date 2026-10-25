@@ -10,7 +10,7 @@ public import Middleware.Core
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 
 namespace Middleware
 
@@ -69,13 +69,19 @@ def parse (body : String) : URI.Query :=
 
 end ContentType.FormUrlEncoded
 
+/-- Options for `params`. -/
+structure ParamsOptions where
+  /-- A form body longer than this is refused with `413` before the handler runs. -/
+  maxBodySize : Nat := 1024 * 1024
+
 /--
 Attaches a `Params` extension to the request, combining the query string (always present) with
 the `application/x-www-form-urlencoded` body (when the request declares that content type). When
 the body is read, it is replaced with an equivalent in-memory body so downstream middleware and
-the handler can still read it.
+the handler can still read it. A form body over `options.maxBodySize` is answered `413`, and one
+that is not UTF-8 `400`, without calling the inner handler.
 -/
-def params : Middleware :=
+def params {e : Engine} [ServerEngine e] (options : ParamsOptions := {}) : Middleware e :=
   fun handler =>
     { handler with
       onRequest := fun req => do
@@ -85,13 +91,15 @@ def params : Middleware :=
           | some v => v.value.trimAscii.toString.toLower.startsWith "application/x-www-form-urlencoded"
           | none => false
         if isFormUrlEncoded then
-          let bodyText ← req.body.readAll (α := String)
-          let form := ContentType.FormUrlEncoded.parse bodyText
-          let freshBody ← Body.fromBytes bodyText.toUTF8
-          let req := { req with
-            body := freshBody
-            extensions := req.extensions.insert ({ query, form } : Params) }
-          handler.onRequest req
+          match ← ServerEngine.readText req.body options.maxBodySize with
+          | .tooLarge => e.text (Response.withStatus .payloadTooLarge) "Payload Too Large"
+          | .notUtf8 => e.text Response.badRequest "The form body is not UTF-8"
+          | .text bodyText =>
+            let form := ContentType.FormUrlEncoded.parse bodyText
+            let req := { req with
+              body := ← ServerEngine.replaceBody req.body bodyText.toUTF8
+              extensions := req.extensions.insert ({ query, form } : Params) }
+            handler.onRequest req
         else
           let req := { req with extensions := req.extensions.insert ({ query } : Params) }
           handler.onRequest req }

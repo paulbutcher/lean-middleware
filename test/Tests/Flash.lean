@@ -6,6 +6,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import Middleware.Cookies
+public import RoutingStd
 public import Middleware.Session
 public import Middleware.Flash
 public import Std.Http.Test.Helpers
@@ -13,7 +14,7 @@ public import Std.Http.Test.Helpers
 public section
 
 open Std.Http
-open Std.Http.Server
+open Routing
 open Std.Http.Internal.Test
 open Middleware (cookies session flash MemoryStore SessionStore SessionData SessionUpdate
   Session Flash FlashMessage)
@@ -28,11 +29,11 @@ def extractCookieValue (response : ByteArray) (name : String) : Option String :=
   | none => none
   | some line => some ((line.drop prefix_.length).toString.splitOn ";" |>.headD "")
 
-def setFlashHandler : StatelessHandler :=
+def setFlashHandler : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok |>.extension (FlashMessage.mk "hello") |>.text "flash-set" }
 
-def readFlashHandler : StatelessHandler :=
+def readFlashHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let message := (req.extensions.get Flash).getD {} |>.message
       Response.ok |>.text (message.getD "<none>") }
@@ -40,7 +41,7 @@ def readFlashHandler : StatelessHandler :=
 /-- Reads the flash message and, unlike `readFlashHandler`, also persists the (already
 flash-stripped) session it received, the pattern a real application needs so the message
 is genuinely delivered once, not left sitting in the store (see `flash`'s doc comment). -/
-def readFlashAndPersistHandler : StatelessHandler :=
+def readFlashAndPersistHandler : StatelessHandler .std :=
   { onRequest := fun req => do
       let sessionData := (req.extensions.get SessionData).getD {}
       let message := (req.extensions.get Flash).getD {} |>.message
@@ -48,14 +49,14 @@ def readFlashAndPersistHandler : StatelessHandler :=
         |>.extension (SessionUpdate.write sessionData.data)
         |>.text (message.getD "<none>") }
 
-def setFlashAndSessionHandler : StatelessHandler :=
+def setFlashAndSessionHandler : StatelessHandler .std :=
   { onRequest := fun _ =>
       Response.ok
         |>.extension (SessionUpdate.write [("other", "x")])
         |>.extension (FlashMessage.mk "next")
         |>.text "both-set" }
 
-def readSessionKeyHandler (key : String) : StatelessHandler :=
+def readSessionKeyHandler (key : String) : StatelessHandler .std :=
   { onRequest := fun req => do
       let data := (req.extensions.get SessionData).getD {} |>.data
       Response.ok |>.text (data.get key |>.getD "<missing>") }
@@ -128,7 +129,7 @@ short-circuit: a handler that ran and rendered "no messages" would look like an 
 which is the failure this replaces. -/
 def refusesWithoutSessionTest : IO Unit := do
   let entered ← IO.mkRef false
-  let handler : StatelessHandler :=
+  let handler : StatelessHandler .std :=
     { onRequest := fun _ => do
         entered.set true
         Response.ok |>.text "reached" }
