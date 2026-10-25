@@ -18,7 +18,7 @@ package «middleware-leanin-tests» where
 require middleware from "../.."
 
 require «routing-leanin» from git
-  "https://github.com/paulbutcher/lean-routing" @ "v0.15.0" / "leanin"
+  "https://github.com/paulbutcher/lean-routing" @ "v0.15.1" / "leanin"
 
 @[default_target]
 lean_lib LeanInTests
