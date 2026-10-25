@@ -14,7 +14,7 @@ resolves `require` package-wide.
 -/
 package «middleware-assets» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.18.0"
+  version := v!"0.19.0"
 
 require middleware from ".."
 
