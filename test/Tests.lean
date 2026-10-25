@@ -20,6 +20,7 @@ public import Tests.Cookies
 public import Tests.Session
 public import Tests.Flash
 public import Tests.Security
+public import Tests.Cors
 public import Tests.Charset
 public import Tests.Proxy
 public import Tests.Redirects

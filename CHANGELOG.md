@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `cors` answers CORS preflights and adds the allow headers to responses for allowed origins.
+
 ## [0.18.0] - 2026-10-24
 
 - Every middleware is generic over `routing`'s `Engine`, so it runs on LeanIn as well as `Std.Http.Server`; write `Middleware .std` where `Middleware` was.

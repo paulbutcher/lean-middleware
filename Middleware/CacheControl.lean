@@ -16,7 +16,6 @@ open Routing
 namespace Middleware.Header.Name
 
 def cacheControl : Header.Name := .mk "cache-control"
-def vary : Header.Name := .mk "vary"
 def expires : Header.Name := .mk "expires"
 
 end Middleware.Header.Name

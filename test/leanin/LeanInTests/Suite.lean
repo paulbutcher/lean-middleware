@@ -11,7 +11,7 @@ namespace LeanInTests
 open Routing
 open Std.Http
 open Middleware (params Params multipartParams MultipartParams catchAll cookies session MemoryStore
-  SessionData SessionUpdate antiForgery AntiForgeryToken file)
+  SessionData SessionUpdate antiForgery AntiForgeryToken file cors CorsOptions)
 
 def answer (builder : Response.Builder) (s : String) :
     LeanIn.Runtime.VM (Response LeanIn.Http.ResponseBody) :=
@@ -90,6 +90,23 @@ def catchAllTest : IO Unit := do
   check s!"catchAll: the error should reach onFailure, got {repr (← reported.get)}"
     ((← reported.get) == some "boom")
 
+def corsTest : IO Unit := do
+  let reported ← IO.mkRef (none : Option String)
+  let handler : StatelessHandler .leanin :=
+    { onRequest := fun _ => answer Response.ok "reached the handler"
+      onFailure := fun err => (reported.set (some (toString err)) : IO Unit) }
+  let options : CorsOptions .leanin :=
+    { origins := .list ["https://app.example"], onRefused := fun _ _ => throw (IO.userError "boom") }
+  let o ← run (cors options handler) .options "/"
+    [("Origin", "https://app.example"), ("Access-Control-Request-Method", "PUT")]
+  check s!"cors: a preflight should be a 204 allowing its origin, got {repr o.status}"
+    (o.status == .noContent && o.header? "access-control-allow-origin" == some "https://app.example")
+  let o ← run (cors options handler) .get "/" [("Origin", "https://evil.example")]
+  check s!"cors: an onRefused that throws should still let the request be answered, got {o.text}"
+    (o.status == .ok && o.text == "reached the handler")
+  check s!"cors: onRefused's exception should reach onFailure, got {repr (← reported.get)}"
+    ((← reported.get) == some "boom")
+
 /-- The `name=value` pair of the first `Set-Cookie`, as a browser would send it back. -/
 def cookiePair? (o : Outcome) : Option String :=
   (o.headers? "set-cookie").head?.bind fun c => (c.splitOn ";").head?
@@ -143,6 +160,7 @@ def all : IO Unit := do
   paramsTest
   multipartTest
   catchAllTest
+  corsTest
   sessionTest
   antiForgeryTest
   fileTest

@@ -26,13 +26,6 @@ namespace Middleware
 
 variable {e : Engine}
 
-/-- Sets `name` to `value`, replacing any value(s) already there rather than adding a second
-occurrence; `Headers.insert` is additive (by design, for multi-value headers like
-`Set-Cookie`), and `Headers.replaceLast` is a no-op when the header is absent, so neither alone
-guarantees exactly one occurrence for a single-valued header. -/
-private def setHeader (headers : Headers) (name : Header.Name) (value : String) : Headers :=
-  (headers.erase name).insert name (Header.Value.ofStringSanitized value)
-
 /-- `X-Frame-Options` (governs whether the page can be framed, a defense against clickjacking).
 Browser support for `allowFrom` is incomplete. -/
 inductive FrameOptions where

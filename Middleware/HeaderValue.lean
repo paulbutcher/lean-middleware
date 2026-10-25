@@ -182,3 +182,20 @@ def ofStringSanitized (s : String) : Std.Http.Header.Value :=
   ⟨String.ofList (sanitized s), valid_sanitized s⟩
 
 end Middleware.Header.Value
+
+namespace Middleware.Header.Name
+
+def vary : Header.Name := .mk "vary"
+
+end Middleware.Header.Name
+
+namespace Middleware
+
+/-- Sets `name` to `value`, replacing any value(s) already there rather than adding a second
+occurrence; `Headers.insert` is additive (by design, for multi-value headers like
+`Set-Cookie`), and `Headers.replaceLast` is a no-op when the header is absent, so neither alone
+guarantees exactly one occurrence for a single-valued header. -/
+def setHeader (headers : Headers) (name : Header.Name) (value : String) : Headers :=
+  (headers.erase name).insert name (Header.Value.ofStringSanitized value)
+
+end Middleware
