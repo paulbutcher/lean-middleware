@@ -17,7 +17,7 @@ package middleware where
 
 /-- `routing` alone and never an engine package, so that an application resolves only the server
 it serves on. -/
-require routing from git "https://github.com/paulbutcher/lean-routing" @ "v0.15.0"
+require routing from git "https://github.com/paulbutcher/lean-routing" @ "v0.15.1"
 
 @[default_target]
 lean_lib Middleware
