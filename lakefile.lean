@@ -13,7 +13,7 @@ required separately but resolved into a single application, so one number is wha
 combination of them an application is holding. A new package starts at the current version and
 points back here with the same comment the others carry. -/
 package middleware where
-  version := v!"0.19.1"
+  version := v!"0.20.0"
 
 /-- `routing` alone and never an engine package, so that an application resolves only the server
 it serves on. -/
