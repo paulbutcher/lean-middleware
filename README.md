@@ -6,6 +6,22 @@ A middleware library for [`routing`](https://github.com/paulbutcher/lean-routing
 
 Every middleware is generic over the engine it wraps, which is inferred from the handler it is applied to. The examples below serve on `.std`; one serving on LeanIn writes `.leanin` where they write `.std`. See `Middleware.apply`'s doc comment (`Middleware/Core.lean`) for why the middlewares are ordered as follows.
 
+### Defaults
+
+`defaults` (`Middleware/Defaults.lean`) applies the layers a `Defaults` record enables, always in that order. It has four presets: `apiDefaults`, `siteDefaults store`, and the `secure` variants of each, which add `sslRedirect` and `hsts` and trust a TLS-terminating proxy's `X-Forwarded-*` headers. Override what differs; layers from other packages and the static root go in the `tracing` and `static` slots:
+
+```lean
+def buildSiteServer (store : CookieStore) : StatelessHandler .std :=
+  defaults
+    { secureSiteDefaults store with
+      frameOptions := some .deny,
+      tracing := serverSpan matchedPattern? {},
+      static := file "public" }
+    myApp
+```
+
+The examples below build stacks by hand.
+
 ### An API
 
 ```lean

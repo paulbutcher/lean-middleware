@@ -36,4 +36,5 @@ def main : IO Unit := do
   Tests.Crypto.AesGcm.run
   Tests.CookieStore.run
   Tests.Integration.run
+  Tests.Defaults.run
   IO.println "All tests passed."

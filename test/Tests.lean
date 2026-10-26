@@ -32,3 +32,4 @@ public import Tests.Tracing
 public import Tests.Crypto.AesGcm
 public import Tests.CookieStore
 public import Tests.Integration
+public import Tests.Defaults

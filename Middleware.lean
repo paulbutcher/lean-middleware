@@ -25,6 +25,7 @@ public import Middleware.Redirects
 public import Middleware.AntiForgery
 public import Middleware.Extensions
 public import Middleware.Extract
+public import Middleware.Defaults
 
 /-
 `Middleware.Test.Browser` is deliberately absent from this list: it imports

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `defaults` applies the middleware a `Defaults` record enables, in the recommended order, with API and site presets.
+
 ## [0.19.1] - 2026-10-26
 
 - Chore: bump dependencies
