@@ -113,13 +113,16 @@ def secureApiDefaults : Defaults e :=
     hsts := some {},
     sslRedirect := some {} }
 
-/-- A browser-facing site over plain HTTP, its sessions kept in `store`. -/
+/-- A browser-facing site over plain HTTP, its sessions kept in `store`. The session cookie is
+`SameSite=Lax`, so a cross-site POST arrives without it; an application that takes one with the
+session, such as an OIDC `form_post` login callback, overrides `session`. -/
 def siteDefaults [SessionStore σ] (store : σ) : Defaults e :=
   { apiDefaults with
     frameOptions := some .sameOrigin,
     contentTypeOptions := true,
     cookies := true,
-    session := session store,
+    session := session store
+      { cookieAttrs := { path := some "/", httpOnly := true, sameSite := some .lax } },
     flash := true,
     multipartParams := some {},
     antiForgery := some {} }
@@ -134,6 +137,7 @@ def secureSiteDefaults [SessionStore σ] (store : σ) : Defaults e :=
     sslRedirect := some {},
     session := session store
       { cookieName := "secure-lean-session",
-        cookieAttrs := { path := some "/", httpOnly := true, secure := true } } }
+        cookieAttrs :=
+          { path := some "/", httpOnly := true, secure := true, sameSite := some .lax } } }
 
 end Middleware

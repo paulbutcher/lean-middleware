@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.20.1] - 2026-10-26
+
+- The `siteDefaults` and `secureSiteDefaults` session cookie is `SameSite=Lax`.
+
 ## [0.20.0] - 2026-10-26
 
 - `defaults` applies the middleware a `Defaults` record enables, in the recommended order, with API and site presets.

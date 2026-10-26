@@ -15,7 +15,7 @@ an application imports, not the packages it resolves.
 -/
 package «middleware-cookiestore» where
   -- Kept in step with `middleware`; see the note in the root lakefile.
-  version := v!"0.20.0"
+  version := v!"0.20.1"
 
 require middleware from ".."
 
