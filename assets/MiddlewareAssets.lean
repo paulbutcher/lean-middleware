@@ -17,13 +17,18 @@ open Routing
 
 namespace Middleware.Assets
 
+/-- Where an entry's bytes are: a file under the root `load` walked, or held in memory. -/
+inductive Source where
+  | file (path : System.FilePath)
+  | bytes (contents : ByteArray)
+
 /-- The path an application asks for, the path that content is served under, the digest that
 distinguishes it, and where the bytes are. -/
 structure Entry where
   logical : String
   served : String
   hash : String
-  file : System.FilePath
+  source : Source
 
 /-- How much of the digest goes in the path: enough to separate one revision of an asset from
 another, short enough to keep URLs readable. The naming is reproducible outside Lean, for a build
@@ -46,6 +51,11 @@ private def fingerprint (logical hash : String) : String :=
   match (logical.splitOn "/").reverse with
   | [] => logical
   | name :: revDirs => String.intercalate "/" (revDirs.reverse ++ [insertHash name hash])
+
+private def entryOf (logical : String) (contents : ByteArray) (source : Source) : Entry :=
+  let hash := digestOf contents
+  { logical, served := "/" ++ fingerprint logical (hash.take fingerprintLength).toString, hash,
+    source }
 
 private def relativeTo (root path : System.FilePath) : Option String :=
   let rootStr := root.toString
@@ -97,13 +107,20 @@ def load (root : System.FilePath) : IO Assets := do
     let some logical := relativeTo root path | continue
     unless ← Middleware.File.isContainedIn root path do
       continue
-    let hash := digestOf (← IO.FS.readBinFile path)
-    entries := entries.push
-      { logical,
-        served := "/" ++ fingerprint logical (hash.take fingerprintLength).toString,
-        hash,
-        file := path }
+    entries := entries.push (entryOf logical (← IO.FS.readBinFile path) (.file path))
   return { entries }
+
+/-- Assets the application generates, such as a stylesheet rendered at startup, each fingerprinted
+from its contents exactly as `load` fingerprints a file. A logical path takes the form `load` gives
+one, relative and with no leading `/`, or `path?` will not find it under the name `load` would. -/
+def ofBytes (generated : List (String × ByteArray)) : Assets :=
+  { entries := generated.toArray.map fun (logical, contents) =>
+      entryOf logical contents (.bytes contents) }
+
+/-- Where both sides hold the same logical path, `path?` answers with the left one's; see the
+`path?_append` theorem in `Tests/Assets.lean`. -/
+instance : Append Assets where
+  append a b := { entries := a.entries ++ b.entries }
 
 end Assets
 
@@ -124,14 +141,17 @@ def assets {e : Engine} [ServerEngine e] (a : Assets)
         match a.entry? (Assets.requestKey req.line.uri.path) with
         | none => handler.onRequest req
         | some entry =>
-          let md ← entry.file.metadata
           let etag : ETag := { value := entry.hash }
           let headers :=
             Headers.empty
               |>.insert (ETag.serialize etag).fst (ETag.serialize etag).snd
               |>.insert Header.Name.cacheControl
                   (Header.Value.ofStringSanitized policy.toWire)
-          ServerEngine.stream { line := { status := .ok, headers } } none
-            (File.streamFile entry.file md.byteSize.toNat) }
+          let builder : Response.Builder := { line := { status := .ok, headers } }
+          match entry.source with
+          | .file path =>
+            let md ← path.metadata
+            ServerEngine.stream builder none (File.streamFile path md.byteSize.toNat)
+          | .bytes contents => ServerEngine.bytes builder contents }
 
 end Middleware

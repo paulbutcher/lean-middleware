@@ -146,6 +146,8 @@ Because the path changes whenever the content does, the far-future default polic
 
 `path?` answers `none` for a name that was never loaded, rather than falling back to the unfingerprinted path, which under a far-future policy would pin stale bytes for a year. Rendering and serving read the same entries, so the two cannot disagree about what an asset is called; `Tests/Assets.lean` proves it.
 
+Content the application generates at startup, such as a stylesheet rendered from Lean, gets the same naming and caching through `Assets.ofBytes`, which takes logical paths and their contents and is served from memory. Combine it with loaded files using `++`: `(← Assets.load root) ++ Assets.ofBytes [("css/theme.css", css.toUTF8)]`. Where both sides hold the same logical path, `path?` answers with the left one's.
+
 Unfingerprinted requests fall through, so `file` can sit inside for anything not worth hashing.
 
 ## Tracing

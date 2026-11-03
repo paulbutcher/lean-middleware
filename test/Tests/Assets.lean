@@ -37,6 +37,23 @@ theorem path?_resolves (a : Assets) (logical served : String)
   obtain ⟨i, hi, he⟩ := Array.getElem_of_mem (Array.mem_of_find?_eq_some hfind)
   exact ⟨i, hi, by simp [he]⟩
 
+/--
+Combining two sets of assets never changes what a name already held by the left one renders as,
+and a name only the right one holds still resolves. An application that layers generated assets
+over loaded files can therefore predict which one a clash resolves to, rather than depending on
+an accident of lookup order.
+
+For any `Assets` values `a` and `b` and any string `logical`, `path?` on `a ++ b` answers exactly
+what `path?` on `a` answers when that is `some`, and otherwise what `path?` on `b` answers; that is
+the meaning of `Option.or`. Together with `path?_resolves`, which holds for `a ++ b` like any other
+value, the left one's path is also the one served.
+-/
+theorem path?_append (a b : Assets) (logical : String) :
+    (a ++ b).path? logical = (a.path? logical).or (b.path? logical) := by
+  show (a.entries ++ b.entries |>.find? _).map _ = _
+  simp only [Assets.path?, Array.find?_append]
+  cases a.entries.find? (·.logical == logical) <;> rfl
+
 def notFoundHandler : StatelessHandler .std :=
   { onRequest := fun _ => Response.notFound |>.text "not found" }
 
@@ -89,6 +106,19 @@ def servesFingerprintedPathTest : IO Unit :=
         assertContains response "Cache-Control: public, max-age=31536000, immutable"
         assertContains response "Etag"
 
+def servesGeneratedAssetTest : IO Unit :=
+  withStylesheet "body { color: red }" fun dir => do
+    let a := (← Assets.load dir) ++ Assets.ofBytes [("css/theme.css", "body { color: green }".toUTF8)]
+    let some served := a.path? "css/theme.css"
+      | throw <| IO.userError "expected a generated asset to have a path"
+    if served == "/css/theme.css" then
+      throw <| IO.userError "expected the served path to differ from the logical one"
+    check "serves a generated asset under its fingerprinted path" (mkGetClose served)
+      ((assets a : Middleware .std) notFoundHandler).onRequest fun response => do
+        assertStatus response "HTTP/1.1 200"
+        assertContains response "body { color: green }"
+        assertContains response "Cache-Control: public, max-age=31536000, immutable"
+
 /-- Unfingerprinted paths have to fall through, or `file` couldn't sit inside this layer. -/
 def plainPathFallsThroughTest : IO Unit :=
   withStylesheet "body { color: red }" fun dir => do
@@ -103,6 +133,7 @@ def run : IO Unit :=
     editedContentMovesThePathTest
     unknownAssetHasNoPathTest
     servesFingerprintedPathTest
+    servesGeneratedAssetTest
     plainPathFallsThroughTest
 
 end Tests.Assets

@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- `Assets.ofBytes` fingerprints and serves in-memory content, and `Assets` values combine with `++`.
+- Breaking: `Assets.Entry` replaces its `file` field with `source : Assets.Source`, a file or in-memory bytes.
+
 ## [0.20.1] - 2026-10-26
 
 - The `siteDefaults` and `secureSiteDefaults` session cookie is `SameSite=Lax`.
