@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.21.0] - 2026-11-03
 
 - `Assets.ofBytes` fingerprints and serves in-memory content, and `Assets` values combine with `++`.
 - Breaking: `Assets.Entry` replaces its `file` field with `source : Assets.Source`, a file or in-memory bytes.
