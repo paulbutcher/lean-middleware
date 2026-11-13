@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.21.1] - 2026-11-13
+
+- Chore: bump dependencies
+
 ## [0.21.0] - 2026-11-03
 
 - `Assets.ofBytes` fingerprints and serves in-memory content, and `Assets` values combine with `++`.
