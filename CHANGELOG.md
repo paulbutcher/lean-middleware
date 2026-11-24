@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.22.1] - 2026-11-24
+
+- Chore: bump dependencies
+
 ## [0.22.0] - 2026-11-24
 
 - Breaking: requires Lean `v4.36.0`; move to that toolchain.
