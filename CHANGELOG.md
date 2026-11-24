@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.22.0] - 2026-11-24
+
+- Breaking: requires Lean `v4.36.0`; move to that toolchain.
+- Breaking: requires `routing` v0.16.0, and `cookiestore` requires `lean-libcrypto` v0.3.0; move to those releases.
+
 ## [0.21.1] - 2026-11-13
 
 - Chore: bump dependencies
