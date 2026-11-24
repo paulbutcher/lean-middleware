@@ -20,7 +20,7 @@ package «middleware-cookiestore» where
 require middleware from ".."
 
 require «lean-libcrypto» from git
-  "https://github.com/paulbutcher/lean-libcrypto" @ "v0.2.1"
+  "https://github.com/paulbutcher/lean-libcrypto" @ "v0.3.0"
 
 require leancrypto from git
   "https://github.com/paulbutcher/leancrypto" @ "v0.4.2"
