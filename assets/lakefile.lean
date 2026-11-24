@@ -19,7 +19,7 @@ package «middleware-assets» where
 require middleware from ".."
 
 require leancrypto from git
-  "https://github.com/paulbutcher/leancrypto" @ "v0.4.2"
+  "https://github.com/paulbutcher/leancrypto" @ "v0.5.0"
 
 /-- The module root is `MiddlewareAssets` rather than `Middleware.Assets` because Lake resolves a
 module name to exactly one package, and the `Middleware.*` tree already belongs to `middleware`.
